@@ -14,7 +14,7 @@ class FakeAx:
 class Mision:
     def __init__(self):
         self.fase = 'ORBITA_1'
-        self.r_inicial = 320e6
+        self.r_inicial = 370e6
         self.r_objetivo = 12e6
         self.dv1 = 0
         self.dv2 = 0
@@ -32,11 +32,12 @@ dt = 1.0
 m = 1000.0
 
 # --- ESTADO INICIAL ---
-pos = np.array([mision.r_inicial, 0.0])
-vel = np.array([0.0, 1115.0])
+
 pos_luna = np.array([384.4e6, 0.0]) 
 vel_luna = np.array([0.0, 1022.0]) 
 pos_tierra = np.array([0.0, 0.0]) 
+pos = np.array([mision.r_inicial, 0.0])
+vel = np.array([0.0, np.sqrt(G * M / mision.r_inicial) + vel_luna[1] - 400.0])
 
 # --- CONFIGURACIÓN GRÁFICA ---
 fig, ax_orbit = plt.subplots(figsize=(9, 9))
@@ -108,34 +109,51 @@ def on_key(event):
 
 fig.canvas.mpl_connect('key_press_event', on_key)
 
-def predecir_futuro(p_ini, v_ini, p_luna_ini, pasos=250):
+def predecir_orbita_completa(p_ini, v_ini, p_luna_ini):
     p_fut = p_ini.copy()
     v_fut = v_ini.copy()
     pl_fut = p_luna_ini.copy()
     vl_fut = vel_luna.copy() 
     
-    trayectoria_relativa = []
-    dt_f = dt * 10 # Reducimos un poco el salto para ganar precisión visual
-    
-    # Determinamos qué objeto manda
     dist_luna = np.linalg.norm(p_ini - p_luna_ini)
-    en_soi_lunar = dist_luna < 66e6 # Radio de la SOI lunar
+    en_luna = dist_luna < 66e6
+    
+    # 1. Determinar el cuerpo dominante para el tiempo de simulación
+    mu = (G * M_LUNA) if en_luna else (G * M)
+    r_rel_ini = dist_luna if en_luna else np.linalg.norm(p_ini)
+    v_rel_ini = np.linalg.norm(v_ini - vel_luna) if en_luna else np.linalg.norm(v_ini)
+    
+    epsilon = (v_rel_ini**2 / 2.0) - (mu / r_rel_ini)
+    
+    if epsilon < 0:
+        a = -mu / (2.0 * epsilon)
+        tiempo_total = 2 * np.pi * np.sqrt(abs(a**3) / mu)
+    else:
+        tiempo_total = 400000 # Trayectoria de escape
 
+    trayectoria_para_dibujar = []
+    pasos = 250
+    dt_p = tiempo_total / pasos 
+    
     for _ in range(pasos):
+        # Avanzamos la física del satélite y de la luna en el futuro
         acc = get_total_acceleration(p_fut, pos_tierra, pl_fut, G, M, M_LUNA)
-        v_fut += acc * dt_f
-        p_fut += v_fut * dt_f
-        pl_fut += vl_fut * dt_f # La luna también se mueve en el futuro
+        v_fut += acc * dt_p
+        p_fut += v_fut * dt_p
         
-        if en_soi_lunar:
-            # GUARDAMOS LA POSICIÓN RELATIVA A LA LUNA
-            # (Donde está el satélite - Donde está la luna en ese instante)
-            trayectoria_relativa.append(p_fut - pl_fut)
+        # IMPORTANTE: La Luna también se mueve en la predicción
+        acc_l = acceleration(pl_fut, pos_tierra, G, M)
+        vl_fut += acc_l * dt_p
+        pl_fut += vl_fut * dt_p
+        
+        if en_luna:
+            # RESTAMOS la posición futura de la luna para obtener la forma circular
+            # Esto nos da la posición relativa: (Satelite_futuro - Luna_futura)
+            trayectoria_para_dibujar.append(p_fut - pl_fut)
         else:
-            # GUARDAMOS LA POSICIÓN RELATIVA A LA TIERRA
-            trayectoria_relativa.append(p_fut.copy())
-        
-    return np.array(trayectoria_relativa), en_soi_lunar
+            trayectoria_para_dibujar.append(p_fut.copy())
+            
+    return np.array(trayectoria_para_dibujar), en_luna
 
 
 
@@ -143,41 +161,36 @@ def predecir_futuro(p_ini, v_ini, p_luna_ini, pasos=250):
 def update(frame):
     global pos, vel, t, pos_luna, vel_luna, pos_tierra
     
-    # 1. Lógica de Maniobra (Ahora con vel directo, ya que RK4 no usa vel_half intermedio)
-    dot_p = np.dot(pos, vel)
-    if mision.fase == 'TRANSF_INICIO':
-        vel += (vel / np.linalg.norm(vel)) * mision.dv1
-        mision.fase = 'EN_TRANSFERENCIA'
-    elif mision.fase == 'EN_TRANSFERENCIA':
-        if dot_p < 0 and np.linalg.norm(pos) > mision.r_inicial * 1.1:
-            vel += (vel / np.linalg.norm(vel)) * mision.dv2
-            mision.fase = 'ORBITA_2'
-            print("🎯 Circularización completada")
-
-    # 2. Física del Satélite (NUEVO RK4)
-    pos, vel = rk4_step(pos, vel, dt, pos_tierra, pos_luna, G, M, M_LUNA)
-
-    # 3. Física de la Luna (Actualización simple)
-    acc_luna = acceleration(pos_luna, pos_tierra, G, M) 
-    vel_luna += acc_luna * dt
-    pos_luna += vel_luna * dt
+    # 1. Bucle de Física (Sub-steps)
+    # Metemos todo aquí dentro para que sea consistente
+    for _ in range(25):
+        # Satélite con RK4
+        pos, vel = rk4_step(pos, vel, dt, pos_tierra, pos_luna, G, M, M_LUNA)
+        
+        # Luna (La movemos con la misma frecuencia que el satélite)
+        acc_l = acceleration(pos_luna, pos_tierra, G, M)
+        vel_luna += acc_l * dt
+        pos_luna += vel_luna * dt
+        
+        t += dt
     
-    # 4. Órbita Fantasma (Predicción)
-    prediccion_rel, en_luna = predecir_futuro(pos, vel, pos_luna)
-    if len(prediccion_rel) > 0:
-        if en_luna:
-            # "Anclamos" la predicción relativa a la posición actual de la Luna
-            puntos_a_dibujar = prediccion_rel + pos_luna
-            path_fantasma.set_color('#FF00FF') # Cambia a Magenta en la Luna para avisar
-        else:
-            puntos_a_dibujar = prediccion_rel
-            path_fantasma.set_color('cyan')
-            
-        path_fantasma.set_data(puntos_a_dibujar[:, 0], puntos_a_dibujar[:, 1])
+    # 2. CALCULAR LA ÓRBITA ACTUAL (La "geometría")
+    puntos_relativos, en_luna = predecir_orbita_completa(pos, vel, pos_luna)
+    
+    if en_luna:
+        # Sumamos la posición ACTUAL de la luna para que la órbita se mueva con ella
+        puntos_visuales = puntos_relativos + pos_luna
+        path_fantasma.set_color('#FF00FF')
+    else:
+        puntos_visuales = puntos_relativos
+        path_fantasma.set_color('cyan')
+    
+    path_fantasma.set_data(puntos_visuales[:, 0], puntos_visuales[:, 1])
+
 
     # 5. Zoom Dinámico
     r_mag = np.linalg.norm(pos)
-    limite = max(1.5e7, r_mag * 1.2) # Mantiene la Tierra a la vista, o se expande
+    limite = max(1.5e7, r_mag * 1.5) # Mantiene la Tierra a la vista, o se expande
     ax_orbit.set_xlim(-limite, limite)
     ax_orbit.set_ylim(-limite, limite)
 
@@ -198,14 +211,8 @@ def update(frame):
         apoapsis = float('inf')
         e = 1.0 # Aproximación para visualización
 
-    # --- ACTUALIZAR VISUALIZACIÓN ---
-    if mision.fase in mision.coords:
-        mision.coords[mision.fase][0].append(pos[0])
-        mision.coords[mision.fase][1].append(pos[1])
     
     luna.set_data([pos_luna[0]], [pos_luna[1]])
-    path_trans.set_data(mision.coords['EN_TRANSFERENCIA'][0], mision.coords['EN_TRANSFERENCIA'][1])
-    path_2.set_data(mision.coords['ORBITA_2'][0], mision.coords['ORBITA_2'][1])
     satellite.set_data([pos[0]], [pos[1]])
     
     # Impacto
@@ -230,7 +237,7 @@ def update(frame):
     t += dt
 
     # Fíjate que devolvemos path_fantasma para que se dibuje
-    return satellite, path_trans, path_2, path_fantasma, telemetria, luna
+    return satellite, path_fantasma, telemetria, luna
 
 ani = FuncAnimation(fig, update, frames=10000, interval=10, blit=False)
 plt.tight_layout()
