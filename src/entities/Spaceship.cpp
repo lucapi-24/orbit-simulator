@@ -12,15 +12,15 @@ Spaceship::Spaceship(std::string name, Vector2 pos, Vector2 vel, double mass, fl
 
 void Spaceship::HandleInput(float dt) {
     // Rotación de la nave
-    if (IsKeyDown(KEY_LEFT)) {
+    if (IsKeyDown(KEY_LEFT) or IsKeyDown(KEY_A)) {
         angle -= rotationSpeed * dt;
     }
-    if (IsKeyDown(KEY_RIGHT)) {
+    if (IsKeyDown(KEY_RIGHT) or IsKeyDown(KEY_D)) {
         angle += rotationSpeed * dt;
     }
 
     // Propulsión
-    isThrusting = IsKeyDown(KEY_UP) && fuel > 0.0f;
+    isThrusting = IsKeyDown(KEY_UP) or IsKeyDown(KEY_W) && fuel > 0.0f;
     if (isThrusting) {
         // Calculamos la dirección del empuje basado en el ángulo actual
         Vector2 thrustDirection = { std::cos(angle), std::sin(angle) };
