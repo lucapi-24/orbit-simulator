@@ -136,3 +136,6 @@ std::vector<std::vector<Vector2>> GravityEngine::PredictTrajectories(
 
     return trajectories;
 }
+Vector2 ComputeAcceleration(const Vector2& pos, const std::vector<CelestialBody>& bodies){
+    
+}

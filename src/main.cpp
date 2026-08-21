@@ -37,13 +37,12 @@ int main(){
 
         playerShip.HandleInput(dt);
 
-        bodies.push_back(playerShip); // Añadimos la nave a la simulación para que sea afectada por la gravedad
+        
 
         GravityEngine::UpdateOrbits(bodies, dt);
         GravityEngine::UpdateSpaceship(playerShip, bodies, dt);
-
-        playerShip.physics = bodies.back().physics;
-        bodies.pop_back();
+        
+        
         
         auto predictedOrbits = GravityEngine::PredictTrajectories(bodies, playerShip, 0.016f, 1000);
         BeginDrawing();
