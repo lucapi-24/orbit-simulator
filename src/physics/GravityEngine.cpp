@@ -17,10 +17,7 @@ void GravityEngine::UpdateOrbits(std::vector<CelestialBody>& bodies, float dt) {
     // 2. Aplicar la aceleración integrada en el tiempo (dt)
     for (int i = 0; i < n; ++i) {
         // El Sol no se mueve, se queda clavado en el centro de la pantalla
-        if (bodies[i].name == "Sol") {
-            bodies[i].physics.velocity = Vector2{0.0f, 0.0f};
-            continue;
-        }
+        if (bodies[i].isStatic) continue;
 
         // v = v + a * dt
         bodies[i].physics.velocity.x += accelerations[i].x * dt;

@@ -8,8 +8,9 @@ public:
     PhysicalState physics;
     float radius;
     Color color;
-    CelestialBody(std::string name, Vector2 pos, Vector2 vel, double mass, float radius, Color color)
-    : name(name), physics{pos, vel, mass}, radius(radius), color(color) {}
+    bool isStatic = false; // Indica si el cuerpo es estático (no se mueve)
+    CelestialBody(std::string name, Vector2 pos, Vector2 vel, double mass, float radius, Color color, bool isStatic = false)
+    : name(name), physics{pos, vel, mass}, radius(radius), color(color), isStatic(isStatic) {}
 
     void Draw() const {
         DrawCircleV(physics.position, radius, color);

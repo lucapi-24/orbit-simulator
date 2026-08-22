@@ -15,7 +15,7 @@ int main(){
 
     std::vector<CelestialBody> bodies;
 
-    bodies.push_back(CelestialBody("Sun", {500, 400}, {0.0f, 0.0f}, 100000, 30.0f, YELLOW));
+    bodies.push_back(CelestialBody("Sun", {500, 400}, {0.0f, 0.0f}, 100000, 30.0f, YELLOW, true));
     bodies.push_back(CelestialBody("Earth", {700, 400}, {0.0f, -70.3f}, 1.0, 12.0f, BLUE));
     bodies.push_back(CelestialBody("Asteroid", {710, 400}, {0.0f, -60.0f}, 0.1, 5.0f, BROWN));
     const Color deepSpaceColor = {0, 0, 20, 255}; // Dark blue color for deep space background
@@ -51,8 +51,8 @@ int main(){
 
 
         for (size_t i = 0; i < bodies.size(); ++i) {
-                if (bodies[i].name == "Sol") continue; // El sol está quieto, no necesita órbita
-
+                if (bodies[i].isStatic) continue;
+                
                 // Usamos Fade para que la línea de la órbita sea un poco translúcida y quede elegante
                 Color orbitColor = Fade(bodies[i].color, 0.4f);
 
