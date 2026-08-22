@@ -14,4 +14,5 @@ public:
         Spaceship ship, 
         float dt, 
         int steps);
+    static Vector2 ComputeAcceleration(const Vector2& pos, const std::vector<CelestialBody>& bodies);
 };
