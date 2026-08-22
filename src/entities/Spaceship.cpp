@@ -20,7 +20,7 @@ void Spaceship::HandleInput(float dt) {
     }
 
     // Propulsión
-    isThrusting = IsKeyDown(KEY_UP) or IsKeyDown(KEY_W) && fuel > 0.0f;
+    isThrusting = (IsKeyDown(KEY_UP) or IsKeyDown(KEY_W)) && fuel > 0.0f;
     if (isThrusting) {
         // Calculamos la dirección del empuje basado en el ángulo actual
         Vector2 thrustDirection = { std::cos(angle), std::sin(angle) };
