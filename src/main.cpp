@@ -52,7 +52,7 @@ int main(){
             accumulator -= FIXED_DT;
             steps++;
         }
-        auto predictedOrbits = GravityEngine::PredictTrajectories(bodies, playerShip, 0.016f, 1000);
+        auto predictedOrbits = GravityEngine::PredictTrajectories(bodies, playerShip, FIXED_DT, 1000);
         BeginDrawing();
         ClearBackground(deepSpaceColor);
         BeginMode2D(camera);
