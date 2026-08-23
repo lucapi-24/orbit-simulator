@@ -7,6 +7,7 @@ void GravityEngine::UpdateOrbits(std::vector<CelestialBody>& bodies, float dt) {
     
     // Usamos Vector2 para almacenar las aceleraciones de este frame
     std::vector<Vector2> accelerations(n, Vector2{0.0f, 0.0f});
+    std::vector<Vector2> accNew(n, Vector2{0.0f, 0.0f});
 
     // 1. Calcular la gravedad entre todos los cuerpos
     for (int i = 0; i < n; ++i) {
@@ -19,26 +20,39 @@ void GravityEngine::UpdateOrbits(std::vector<CelestialBody>& bodies, float dt) {
         // El Sol no se mueve, se queda clavado en el centro de la pantalla
         if (bodies[i].isStatic) continue;
 
-        // v = v + a * dt
-        bodies[i].physics.velocity.x += accelerations[i].x * dt;
-        bodies[i].physics.velocity.y += accelerations[i].y * dt;
+        // x += v·dt + ½·a₀·dt²
+        bodies[i].physics.position.x += bodies[i].physics.velocity.x * dt + 0.5f * accelerations[i].x * dt * dt;
+        bodies[i].physics.position.y += bodies[i].physics.velocity.y * dt + 0.5f * accelerations[i].y * dt * dt;
+    }
 
-        // x = x + v * dt
-        bodies[i].physics.position.x += bodies[i].physics.velocity.x * dt;
-        bodies[i].physics.position.y += bodies[i].physics.velocity.y * dt;
+    for (int i = 0; i < n; ++i) {
+        const Vector2 acc = ComputeAcceleration(bodies[i].physics.position, bodies);
+        accNew[i] = acc;
+    }
+
+    for (int i = 0; i < n; ++i) {
+        // El Sol no se mueve, se queda clavado en el centro de la pantalla
+        if (bodies[i].isStatic) continue;
+
+        // v += ½·(a₀ + a₁)·dt
+        bodies[i].physics.velocity.x += 0.5f * (accelerations[i].x + accNew[i].x) * dt; // Usamos la aceleración promedio
+        bodies[i].physics.velocity.y += 0.5f * (accelerations[i].y + accNew[i].y) * dt; // Usamos la aceleración promedio
     }
 }
 
 void GravityEngine::UpdateSpaceship(Spaceship& ship, const std::vector<CelestialBody>& bodies, float dt) {
-    Vector2 totalForce = ComputeAcceleration(ship.physics.position, bodies);
-
-    // Aplicamos la aceleración gravitatoria a la velocidad de la nave
-    ship.physics.velocity.x += totalForce.x * dt;
-    ship.physics.velocity.y += totalForce.y * dt;
+    Vector2 acceleration = ComputeAcceleration(ship.physics.position, bodies);
 
     // Actualizamos la posición de la nave
-    ship.physics.position.x += ship.physics.velocity.x * dt;
-    ship.physics.position.y += ship.physics.velocity.y * dt;
+    ship.physics.position.x += ship.physics.velocity.x * dt + 0.5f * acceleration.x * dt * dt;
+    ship.physics.position.y += ship.physics.velocity.y * dt + 0.5f * acceleration.y * dt * dt;
+
+
+    Vector2 accNew = ComputeAcceleration(ship.physics.position, bodies);
+
+    // Aplicamos la aceleración gravitatoria a la velocidad de la nave
+    ship.physics.velocity.x += (0.5f * (acceleration.x + accNew.x) * dt);
+    ship.physics.velocity.y += (0.5f * (acceleration.y + accNew.y) * dt);
 }
 
 std::vector<std::vector<Vector2>> GravityEngine::PredictTrajectories(

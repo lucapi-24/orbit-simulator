@@ -8,6 +8,8 @@
 int main(){
     const int screenWidth = 1000;
     const int screenHeight = 800;
+    constexpr float FIXED_DT = 1.0f/240.0f;
+    constexpr int MAX_PASOS = 5;
     
 
     InitWindow(screenWidth, screenHeight, "Orbit Simulator");
@@ -28,22 +30,28 @@ int main(){
     camera.rotation = 0.0f;
     camera.zoom = 1.0f;
 
+    float accumulator = 0.0f;
+
     while (!WindowShouldClose()){
+
+        //CAMERA ZOOM
         camera.zoom += GetMouseWheelMove() * 0.05f;
         camera.target = playerShip.physics.position; // Mantener la cámara centrada en la nave
         if (camera.zoom < 0.1f) camera.zoom = 0.1f;
-        float dt = GetFrameTime();
-        if (dt > 0.1f) dt = 0.1f; // Cap delta time to avoid large jumps
 
-        playerShip.HandleInput(dt);
 
-        
+        // Delta time
+        accumulator += GetFrameTime();
+        if(accumulator > 0.1f) accumulator = 0.1f; // Cap delta time to avoid large jumps
 
-        GravityEngine::UpdateOrbits(bodies, dt);
-        GravityEngine::UpdateSpaceship(playerShip, bodies, dt);
-        
-        
-        
+        int steps = 0;
+        while (accumulator >= FIXED_DT && steps < MAX_PASOS) {
+            playerShip.HandleInput(FIXED_DT);
+            GravityEngine::UpdateOrbits(bodies, FIXED_DT);
+            GravityEngine::UpdateSpaceship(playerShip, bodies, FIXED_DT);
+            accumulator -= FIXED_DT;
+            steps++;
+        }
         auto predictedOrbits = GravityEngine::PredictTrajectories(bodies, playerShip, 0.016f, 1000);
         BeginDrawing();
         ClearBackground(deepSpaceColor);
