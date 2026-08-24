@@ -1,8 +1,9 @@
 #pragma once
 #include "raylib.h"
+#include "Vec2d.hpp"
 
 struct PhysicalState {
-    Vector2 position;
-    Vector2 velocity;
+    Vec2d position;
+    Vec2d velocity;
     double mass;
 };

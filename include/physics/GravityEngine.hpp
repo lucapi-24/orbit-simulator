@@ -5,14 +5,14 @@
 
 class GravityEngine {
 private: 
-    static constexpr double G = 10.0; // Gravitational constant
+    static constexpr double G = 6.67430e-11; // Gravitational constant (SI)
 public:
-    static void UpdateOrbits(std::vector<CelestialBody>& bodies, float dt);
-    static void UpdateSpaceship(Spaceship& ship, const std::vector<CelestialBody>& bodies, float dt);
-    static std::vector<std::vector<Vector2>> PredictTrajectories(
+    static void UpdateOrbits(std::vector<CelestialBody>& bodies, double dt);
+    static void UpdateSpaceship(Spaceship& ship, const std::vector<CelestialBody>& bodies, double dt);
+    static std::vector<std::vector<Vec2d>> PredictTrajectories(
         std::vector<CelestialBody> virtualBodies, 
         Spaceship ship, 
-        float dt, 
+        double dt, 
         int steps);
-    static Vector2 ComputeAcceleration(const Vector2& pos, const std::vector<CelestialBody>& bodies);
+    static Vec2d ComputeAcceleration(const Vec2d& pos, const std::vector<CelestialBody>& bodies);
 };

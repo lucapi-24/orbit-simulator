@@ -1,5 +1,6 @@
 #pragma once
 #include "entities/CelestialBody.hpp"
+#include "Vec2d.hpp"
 
 class Spaceship : public CelestialBody {
 private:
@@ -9,11 +10,11 @@ private:
     float thrustPower;
     bool isThrusting;
 public:
-    Spaceship(std::string name, Vector2 pos, Vector2 vel, double mass, float radius, Color color);
+    Spaceship(std::string name, Vec2d pos, Vec2d vel, double mass, float radius, Color color);
 
     // Métodos específicos de la nave
-    void HandleInput(float dt);
-    void Draw() const; // Sobrescribimos el método de dibujo para que pinte un triángulo en lugar de un círculo
+    void HandleInput(double dt);
+    void Draw(float invZoom) const; // Triángulo de tamaño constante en pantalla
     
     // Getters útiles
     float GetAngle() const { return angle; }
