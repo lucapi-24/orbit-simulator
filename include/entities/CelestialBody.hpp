@@ -13,6 +13,18 @@ public:
     CelestialBody(std::string name, Vec2d pos, Vec2d vel, double mass, double radiusMeters, Color color, bool isStatic = false)
     : name(name), physics{pos, vel, mass}, radiusM(radiusMeters), color(color), isStatic(isStatic) {}
 
+    const CelestialBody* primary = nullptr; // Apunta al cuerpo alrededor del cual orbita (ej. Sol para la Tierra)
+    float soiRadius = 0.0f;           // Radio de la Esfera de Influencia
+
+    void UpdateSOIRadius() {
+        if (primary) {
+            double r = (physics.position - primary->physics.position).length();
+            soiRadius = static_cast<float>(r * std::pow(physics.mass / primary->physics.mass, 0.4));
+        } else {
+            soiRadius = 0.0f;
+        }
+    }
+
     // invZoom = 1/camera.zoom. Escala real; mínimo 1 px en pantalla para no desaparecer.
     void Draw(float invZoom = 1.0f) const {
         float rWorld = static_cast<float>(radiusM * Vec2d::renderScale);

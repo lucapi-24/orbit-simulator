@@ -4,6 +4,7 @@
 #include "entities/Spaceship.hpp"
 #include <vector>
 #include <cstdio>
+#include <iostream>
 
 int main() {
     const int screenWidth = 1000;
@@ -36,6 +37,13 @@ int main() {
 
     const Color deepSpaceColor = {0, 0, 20, 255};
 
+    bodies[1].primary = &bodies[0];  // La Tierra orbita alrededor del Sol
+    bodies[2].primary = &bodies[0];  // El asteroide orbita alrededor del Sol
+
+    for (auto& body : bodies) {
+        body.UpdateSOIRadius();
+    }
+
     // Nave en órbita baja terrestre (~400 km)
     const double LEO_R = EARTH_RADIUS + 400e3;
     const double LEO_V = std::sqrt(G * M_EARTH / LEO_R);
@@ -51,7 +59,7 @@ int main() {
     camera.zoom = 1.0f;
 
     double accumulator = 0.0;
-
+    OrbitInfo orbitInfo ;
     while (!WindowShouldClose()) {
         // Cámara y zoom (exponencial: necesario para ver LEO desde escala solar)
         camera.zoom *= expf(GetMouseWheelMove() * 0.25f);
@@ -67,6 +75,13 @@ int main() {
             playerShip.HandleInput(FIXED_DT);
             GravityEngine::UpdateOrbits(bodies, PHYS_DT);
             GravityEngine::UpdateSpaceship(playerShip, bodies, PHYS_DT);
+            playerShip.primary = GravityEngine::GetDominantBody(playerShip.physics.position, bodies);  // Actualiza la SOI de la nave
+            playerShip.UpdateSOIRadius();
+            orbitInfo = GravityEngine::ComputeOrbitInfo(
+                playerShip.physics.position - playerShip.primary->physics.position,
+                playerShip.physics.velocity - playerShip.primary->physics.velocity,
+                G * playerShip.primary->physics.mass);
+            
             accumulator -= FIXED_DT;
             steps++;
         }
@@ -78,8 +93,12 @@ int main() {
         if (++diagFrame % 60 == 0) {
             Vec2d relR = playerShip.physics.position - bodies[1].physics.position;
             Vec2d relV = playerShip.physics.velocity - bodies[1].physics.velocity;
+            printf("SOI: %s | ", playerShip.primary ? playerShip.primary->name.c_str() : "N/A");
             printf("zoom=%9.2f | nave-Tierra=%9.1f km | vRel=%7.1f m/s | Tierra-Sol=%.1f km\n",
                    camera.zoom, relR.length() / 1e3, relV.length(), bodies[1].physics.position.length() / 1e3);
+            printf("  Orbita: a=%.1f km | e=%.4f | rp=%.1f km | ra=%.1f km | T=%.1f h | eps=%+.3e J/kg | h=%.3e m^2/s\n",
+                   orbitInfo.a / 1e3, orbitInfo.e, orbitInfo.rp / 1e3, orbitInfo.ra / 1e3, orbitInfo.T / 3600.0,
+                   orbitInfo.eps, orbitInfo.h);
         }
         float invZoom = 1.0f / camera.zoom;
 

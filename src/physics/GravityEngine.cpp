@@ -83,3 +83,58 @@ Vec2d GravityEngine::ComputeAcceleration(const Vec2d& pos, const std::vector<Cel
 
     return { ax, ay };
 }
+
+const CelestialBody* GravityEngine::GetDominantBody(const Vec2d& pos, const std::vector<CelestialBody>& bodies) {
+    const CelestialBody* dominant = &bodies[0];
+    double minDistance = std::numeric_limits<double>::max();
+
+    for (const auto& body : bodies) {
+        double distance = (body.physics.position - pos).length();
+        if (distance < body.soiRadius) {
+            minDistance = distance;
+            dominant = const_cast<CelestialBody*>(&body);
+        }
+    }
+
+    return dominant;
+}
+
+const OrbitInfo GravityEngine::ComputeOrbitInfo(const Vec2d& r_rel, const Vec2d& v_rel, double mu) {
+    OrbitInfo info;
+
+    double r = r_rel.length();
+    double v = v_rel.length();
+    double eps = 0.5 * v * v - mu / r;
+    double h = std::abs(r_rel.x * v_rel.y - r_rel.y * v_rel.x);
+
+    info.mu = mu;
+    info.r = r;
+    info.v = v;
+    info.eps = eps;
+    info.h = h;
+
+    if (eps < 0) {
+        info.hyperbolic = false;
+        info.a = -mu / (2.0 * eps);
+        info.e = std::sqrt(1.0 + (2.0 * eps * h * h) / (mu * mu));
+        info.rp = info.a * (1.0 - info.e);
+        info.ra = info.a * (1.0 + info.e);
+        info.T = 2.0 * M_PI * std::sqrt(info.a * info.a * info.a / mu);
+    } else if (eps == 0) {
+        info.hyperbolic = false;
+        info.a = std::numeric_limits<double>::infinity();
+        info.e = 1.0;
+        info.rp = h * h / mu;
+        info.ra = std::numeric_limits<double>::infinity();
+        info.T = std::numeric_limits<double>::infinity();
+    } else {
+        info.hyperbolic = true;
+        info.a = -mu / (2.0 * eps);
+        info.e = std::sqrt(1.0 + (2.0 * eps * h * h) / (mu * mu));
+        info.rp = info.a * (1.0 - info.e);
+        info.ra = std::numeric_limits<double>::infinity();
+        info.T = std::numeric_limits<double>::infinity();
+    }
+
+    return info;
+}
