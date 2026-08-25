@@ -60,6 +60,8 @@ int main() {
 
     double accumulator = 0.0;
     OrbitInfo orbitInfo ;
+    playerShip.primary = GravityEngine::GetDominantBody(playerShip.physics.position, bodies);
+    playerShip.UpdateSOIRadius();
     while (!WindowShouldClose()) {
         // Cámara y zoom (exponencial: necesario para ver LEO desde escala solar)
         camera.zoom *= expf(GetMouseWheelMove() * 0.25f);
@@ -104,6 +106,7 @@ int main() {
 
         BeginDrawing();
         ClearBackground(deepSpaceColor);
+        
         BeginMode2D(camera);
 
         // Órbitas predichas
@@ -125,7 +128,12 @@ int main() {
             for (size_t i = 0; i < shipPoints.size() - 1; ++i) {
                 float factor = 1.0f - static_cast<float>(i) / shipPoints.size();
                 Color segmentColor = Fade(playerShip.color, 0.6f * factor);
-                DrawLineV(shipPoints[i].toRaylib(), shipPoints[i + 1].toRaylib(), segmentColor);
+                Vector2 origin = playerShip.primary ?
+                    playerShip.primary->physics.position.toRaylib() : Vector2{0, 0};
+
+                Vector2 a = { shipPoints[i].toRaylib().x - origin.x, shipPoints[i].toRaylib().y - origin.y };
+                Vector2 b = { shipPoints[i+1].toRaylib().x - origin.x, shipPoints[i+1].toRaylib().y - origin.y };
+                DrawLineV(a, b, segmentColor);
             }
         }
 
@@ -143,6 +151,22 @@ int main() {
         DrawRectangle(15, 65, 200, 25, GRAY);
         DrawRectangle(15, 65, static_cast<int>(fuel * 2), 25, GREEN);
         DrawRectangleLines(15, 65, 200, 25, WHITE);
+
+        // Panel de telemetría orbital
+        int px = screenWidth - 320;
+        int py = 20;
+        int lh = 20;  // line height
+
+        DrawRectangle(px - 10, py - 5, 310, 8 * lh + 10, Fade(BLACK, 0.7f));
+
+        DrawText(TextFormat("Cuerpo: %s", playerShip.primary->name.c_str()), px, py, 18, YELLOW);
+        DrawText(TextFormat("Altitud: %.0f km", (orbitInfo.r - playerShip.primary->radiusM) / 1e3), px, py + lh, 18, RAYWHITE);
+        DrawText(TextFormat("vRel: %.1f m/s", orbitInfo.v), px, py + lh*2, 18, RAYWHITE);
+        DrawText(TextFormat("Pericentro: %.0f km", orbitInfo.rp / 1e3), px, py + lh*3, 18, GREEN);
+        DrawText(TextFormat("Apocentro: %.0f km", orbitInfo.ra / 1e3), px, py + lh*4, 18, orbitInfo.hyperbolic ? RED : GREEN);
+        DrawText(TextFormat("Excentricidad: %.4f", orbitInfo.e), px, py + lh*5, 18, RAYWHITE);
+        DrawText(TextFormat("Periodo: %.1f min", orbitInfo.T / 60.0), px, py + lh*6, 18, RAYWHITE);
+        DrawText(TextFormat("Energia: %.2e J/kg", orbitInfo.eps), px, py + lh*7, 18, RAYWHITE);
 
         EndDrawing();
     }
