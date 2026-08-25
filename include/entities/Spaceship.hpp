@@ -14,7 +14,7 @@ public:
 
     // Métodos específicos de la nave
     void HandleInput(double dt);
-    void Draw(float invZoom) const; // Triángulo de tamaño constante en pantalla
+    void Draw(float invZoom, Vector2 offset = {0, 0}) const; // Triángulo de tamaño constante en pantalla
     
     // Getters útiles
     float GetAngle() const { return angle; }

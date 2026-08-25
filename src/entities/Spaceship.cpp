@@ -30,8 +30,8 @@ void Spaceship::HandleInput(double dt) {
     }
 }
 
-void Spaceship::Draw(float invZoom) const {
-    Vector2 c = physics.position.toRaylib();  // centro en píxeles-mundo (UNA sola conversión)
+void Spaceship::Draw(float invZoom, Vector2 offset) const {
+    Vector2 c = { physics.position.toRaylib().x - offset.x, physics.position.toRaylib().y - offset.y };  // centro en píxeles-mundo (UNA sola conversión)
     float size = 14.0f * invZoom;             // tamaño constante en pantalla
 
     Vector2 v1 = { c.x + std::cos(angle) * size,           c.y + std::sin(angle) * size };

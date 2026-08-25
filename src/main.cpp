@@ -88,7 +88,7 @@ int main() {
             steps++;
         }
 
-        auto predictedOrbits = GravityEngine::PredictTrajectories(bodies, playerShip, PHYS_DT, 1000);
+        auto predictedOrbits = GravityEngine::PredictTrajectories(bodies, playerShip, PHYS_DT, 3000);
 
         // Telemetría por consola (cada ~1 s real): verifica la física con números
         static int diagFrame = 0;
@@ -106,6 +106,14 @@ int main() {
 
         BeginDrawing();
         ClearBackground(deepSpaceColor);
+        Vector2 origin = playerShip.primary ?
+        playerShip.primary->physics.position.toRaylib() : Vector2{0, 0};
+
+        Vector2 shipOffset = {
+            playerShip.physics.position.toRaylib().x - origin.x,
+            playerShip.physics.position.toRaylib().y - origin.y
+        };
+        camera.target = shipOffset;
         
         BeginMode2D(camera);
 
@@ -117,31 +125,43 @@ int main() {
             std::vector<Vector2> drawPoints;
             drawPoints.reserve(predictedOrbits[i].size());
             for (const auto& p : predictedOrbits[i]) {
-                drawPoints.push_back(p.toRaylib());
+                drawPoints.push_back({p.toRaylib().x - origin.x, p.toRaylib().y - origin.y});
             }
             DrawLineStrip(drawPoints.data(), drawPoints.size(), orbitColor);
         }
 
         // Nave predicha
         const auto& shipPoints = predictedOrbits.back();
-        if (shipPoints.size() > 1) {
+        int primaryIdx = -1;
+        for (size_t i = 0; i < bodies.size(); ++i) {
+            if (&bodies[i] == playerShip.primary) {
+                primaryIdx = static_cast<int>(i);
+                break;
+            }
+        }
+
+        if (shipPoints.size() > 1 && primaryIdx >= 0) {
+            const auto& primaryPoints = predictedOrbits[primaryIdx];
             for (size_t i = 0; i < shipPoints.size() - 1; ++i) {
                 float factor = 1.0f - static_cast<float>(i) / shipPoints.size();
                 Color segmentColor = Fade(playerShip.color, 0.6f * factor);
-                Vector2 origin = playerShip.primary ?
-                    playerShip.primary->physics.position.toRaylib() : Vector2{0, 0};
-
-                Vector2 a = { shipPoints[i].toRaylib().x - origin.x, shipPoints[i].toRaylib().y - origin.y };
-                Vector2 b = { shipPoints[i+1].toRaylib().x - origin.x, shipPoints[i+1].toRaylib().y - origin.y };
+                Vector2 a = {
+                    shipPoints[i].toRaylib().x - primaryPoints[i].toRaylib().x,
+                    shipPoints[i].toRaylib().y - primaryPoints[i].toRaylib().y
+                };
+                Vector2 b = {
+                    shipPoints[i+1].toRaylib().x - primaryPoints[i+1].toRaylib().x,
+                    shipPoints[i+1].toRaylib().y - primaryPoints[i+1].toRaylib().y
+                };
                 DrawLineV(a, b, segmentColor);
             }
         }
 
         // Cuerpos y nave
         for (const auto& body : bodies) {
-            body.Draw(invZoom);
+            body.Draw(invZoom, origin);
         }
-        playerShip.Draw(invZoom);
+        playerShip.Draw(invZoom, origin);
 
         EndMode2D();
 

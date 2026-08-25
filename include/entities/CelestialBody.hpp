@@ -26,9 +26,9 @@ public:
     }
 
     // invZoom = 1/camera.zoom. Escala real; mínimo 1 px en pantalla para no desaparecer.
-    void Draw(float invZoom = 1.0f) const {
+    void Draw(float invZoom = 1.0f, Vector2 offset = {0, 0}) const {
         float rWorld = static_cast<float>(radiusM * Vec2d::renderScale);
         if (rWorld < invZoom) rWorld = invZoom;
-        DrawCircleV(physics.position.toRaylib(), rWorld, color);
+        DrawCircleV({physics.position.toRaylib().x - offset.x, physics.position.toRaylib().y - offset.y}, rWorld, color);
     }
 };
