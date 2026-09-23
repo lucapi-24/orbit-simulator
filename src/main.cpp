@@ -12,9 +12,12 @@ int main() {
 
     constexpr double FIXED_DT = 1.0 / 240.0;      // paso de RELOJ (input, acumulador)
     constexpr int MAX_PASOS = 5;
+    constexpr double VERLET_SAFETY = 0.2;         // max dt*omega para estabilidad de Verlet
     constexpr double PX_PER_M = 1.0e-9;
-    constexpr double TIME_SCALE = 600.0;          // aceleración temporal de la física
-    constexpr double PHYS_DT = FIXED_DT * TIME_SCALE;  // paso de FÍSICA (2.5 s)
+    static constexpr double WARP_TABLE[] = {1.0, 10.0, 100.0, 1000.0, 10000.0, 100000.0, 1000000.0};
+    int warpIndex = 0;
+    int MAX_WARP = sizeof(WARP_TABLE) / sizeof(WARP_TABLE[0]) - 1;
+    double PHYS_DT = FIXED_DT * WARP_TABLE[warpIndex];
 
     InitWindow(screenWidth, screenHeight, "Orbit Simulator");
     Vec2d::renderScale = PX_PER_M;
@@ -68,6 +71,19 @@ int main() {
         camera.target = playerShip.physics.position.toRaylib();
         if (camera.zoom < 0.05) camera.zoom = 0.05;
 
+        if (IsKeyPressed(KEY_PERIOD)) {           // subir
+            int next = warpIndex + 1;
+            bool altaSOI = (WARP_TABLE[next] > 100000) &&          // niveles 6-7 (dt 417s+)
+                        playerShip.primary &&
+                        playerShip.primary != &bodies[0];        // dentro de una SOI planetaria
+            if (next <= MAX_WARP && !altaSOI){
+                warpIndex = next;
+            }
+        }
+        if (IsKeyPressed(KEY_COMMA) && warpIndex > 0) warpIndex--;  
+        
+        PHYS_DT = FIXED_DT * WARP_TABLE[warpIndex];
+
         // Acumulador de tiempo real
         accumulator += GetFrameTime();
         if (accumulator > 0.1) accumulator = 0.1;
@@ -75,8 +91,24 @@ int main() {
         int steps = 0;
         while (accumulator >= FIXED_DT && steps < MAX_PASOS) {
             playerShip.HandleInput(FIXED_DT);
-            GravityEngine::UpdateOrbits(bodies, PHYS_DT);
-            GravityEngine::UpdateSpaceship(playerShip, bodies, PHYS_DT);
+
+            // Substepping: PHYS_DT completo (warp) se divide en pasos estables.
+            // N = ceil(PHYS_DT * omegaMax / VERLET_SAFETY) => h_sub*omegaMax <= VERLET_SAFETY.
+            double omegaMax = 0.0;
+            for (const auto& body : bodies) {
+                double d = (playerShip.physics.position - body.physics.position).length();
+                if (d < 1.0) d = 1.0;
+                double omega = std::sqrt(G * body.physics.mass / (d * d * d));
+                if (omega > omegaMax) omegaMax = omega;
+            }
+            int nSub = static_cast<int>(std::ceil(PHYS_DT * omegaMax / VERLET_SAFETY));
+            if (nSub < 1) nSub = 1;
+            double hSub = PHYS_DT / nSub;
+
+            for (int k = 0; k < nSub; ++k) {
+                GravityEngine::UpdateAll(bodies, playerShip, hSub);
+            }
+
             playerShip.primary = GravityEngine::GetDominantBody(playerShip.physics.position, bodies);  // Actualiza la SOI de la nave
             playerShip.UpdateSOIRadius();
             orbitInfo = GravityEngine::ComputeOrbitInfo(
@@ -88,7 +120,27 @@ int main() {
             steps++;
         }
 
-        auto predictedOrbits = GravityEngine::PredictTrajectories(bodies, playerShip, PHYS_DT, 3000);
+       
+        // ── Cálculo de cónicas predichas (datos puros, sin dibujar) ──
+        std::vector<Vec2d> shipConic;
+        if (playerShip.primary) {
+            Vec2d shipRelR = playerShip.physics.position - playerShip.primary->physics.position;
+            Vec2d shipRelV = playerShip.physics.velocity - playerShip.primary->physics.velocity;
+            double muShip = G * playerShip.primary->physics.mass;
+            shipConic = GravityEngine::PredictConic(shipRelR, shipRelV, muShip,
+                                                    playerShip.primary->physics.position, 720);
+        }
+
+        std::vector<std::vector<Vec2d>> bodyConics(bodies.size());
+        for (size_t i = 0; i < bodies.size(); ++i) {
+            const auto& body = bodies[i];
+            if (body.isStatic || !body.primary) continue;   // Sun no tiene primary
+            Vec2d bRelR = body.physics.position - body.primary->physics.position;
+            Vec2d bRelV = body.physics.velocity - body.primary->physics.velocity;
+            double muB = G * body.primary->physics.mass;
+            bodyConics[i] = GravityEngine::PredictConic(bRelR, bRelV, muB,
+                                                        body.primary->physics.position, 360);
+        }
 
         // Telemetría por consola (cada ~1 s real): verifica la física con números
         static int diagFrame = 0;
@@ -117,44 +169,21 @@ int main() {
         
         BeginMode2D(camera);
 
-        // Órbitas predichas
-        for (size_t i = 0; i < bodies.size(); ++i) {
-            if (bodies[i].isStatic) continue;
-
-            Color orbitColor = Fade(bodies[i].color, 0.4f);
-            std::vector<Vector2> drawPoints;
-            drawPoints.reserve(predictedOrbits[i].size());
-            for (const auto& p : predictedOrbits[i]) {
-                drawPoints.push_back({p.toRaylib().x - origin.x, p.toRaylib().y - origin.y});
-            }
-            DrawLineStrip(drawPoints.data(), drawPoints.size(), orbitColor);
+        // Cónicas predichas (solo dibujo, datos ya calculados arriba)
+        std::vector<Vector2> pts;
+        pts.reserve(shipConic.size());
+        for (const auto& p : shipConic) {
+            pts.push_back({ p.toRaylib().x - origin.x, p.toRaylib().y - origin.y });
         }
+        if (pts.size() > 1) DrawLineStrip(pts.data(), pts.size(), Fade(playerShip.color, 0.5f));
 
-        // Nave predicha
-        const auto& shipPoints = predictedOrbits.back();
-        int primaryIdx = -1;
         for (size_t i = 0; i < bodies.size(); ++i) {
-            if (&bodies[i] == playerShip.primary) {
-                primaryIdx = static_cast<int>(i);
-                break;
+            std::vector<Vector2> bPts;
+            bPts.reserve(bodyConics[i].size());
+            for (const auto& p : bodyConics[i]) {
+                bPts.push_back({ p.toRaylib().x - origin.x, p.toRaylib().y - origin.y });
             }
-        }
-
-        if (shipPoints.size() > 1 && primaryIdx >= 0) {
-            const auto& primaryPoints = predictedOrbits[primaryIdx];
-            for (size_t i = 0; i < shipPoints.size() - 1; ++i) {
-                float factor = 1.0f - static_cast<float>(i) / shipPoints.size();
-                Color segmentColor = Fade(playerShip.color, 0.6f * factor);
-                Vector2 a = {
-                    shipPoints[i].toRaylib().x - primaryPoints[i].toRaylib().x,
-                    shipPoints[i].toRaylib().y - primaryPoints[i].toRaylib().y
-                };
-                Vector2 b = {
-                    shipPoints[i+1].toRaylib().x - primaryPoints[i+1].toRaylib().x,
-                    shipPoints[i+1].toRaylib().y - primaryPoints[i+1].toRaylib().y
-                };
-                DrawLineV(a, b, segmentColor);
-            }
+            if (bPts.size() > 1) DrawLineStrip(bPts.data(), bPts.size(), Fade(bodies[i].color, 0.4f));
         }
 
         // Cuerpos y nave
@@ -168,6 +197,9 @@ int main() {
         // UI
         float fuel = playerShip.GetFuel();
         DrawText("Orbit Simulator - SI units", 20, 20, 20, RAYWHITE);
+        if (orbitInfo.T / PHYS_DT < 50) {
+            DrawText(TextFormat("Órbitas inestables, baja warp"), 20, 45, 20, RED);
+        } 
         DrawRectangle(15, 65, 200, 25, GRAY);
         DrawRectangle(15, 65, static_cast<int>(fuel * 2), 25, GREEN);
         DrawRectangleLines(15, 65, 200, 25, WHITE);
