@@ -14,6 +14,7 @@ public:
 
     // Métodos específicos de la nave
     void HandleInput(double dt);
+    void ApplyImpulse(double dv, const Vec2d& dir); // Impulso instantáneo (Hohmann) con consumo de fuel
     void Draw(float invZoom, Vector2 offset = {0, 0}) const; // Triángulo de tamaño constante en pantalla
     
     // Getters útiles

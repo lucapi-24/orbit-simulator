@@ -4,7 +4,7 @@
 
 Spaceship::Spaceship(std::string name, Vec2d pos, Vec2d vel, double mass, float radius, Color color)
     : CelestialBody(name, pos, vel, mass, radius, color),
-      fuel(100.0f),
+      fuel(1e6f),
       angle(-PI / 2.0f),
       rotationSpeed(4.0f),
       thrustPower(200.0),  // m/s^2 - ajustado a unidades SI
@@ -28,6 +28,13 @@ void Spaceship::HandleInput(double dt) {
         fuel -= 10.0 * dt;
         if (fuel < 0.0) fuel = 0.0;
     }
+}
+
+void Spaceship::ApplyImpulse(double dv, const Vec2d& dir) {
+    if (fuel <= 0.0 || dv <= 0.0) return;
+    physics.velocity += dir * dv;
+    fuel -= static_cast<float>(dv);
+    if (fuel < 0.0) fuel = 0.0;
 }
 
 void Spaceship::Draw(float invZoom, Vector2 offset) const {
