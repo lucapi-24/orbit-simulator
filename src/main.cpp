@@ -19,6 +19,10 @@ int main() {
     int MAX_WARP = sizeof(WARP_TABLE) / sizeof(WARP_TABLE[0]) - 1;
     double PHYS_DT = FIXED_DT * WARP_TABLE[warpIndex];
 
+    enum CamMode { FOLLOW_BODY, FREE };      // FOLLOW_BODY: sigue a targetIdx (-1 = nave)
+    int targetIdx = -1;                     // -1 = nave; >=0 = índice en bodies
+    Vector2 freeTarget{0, 0};
+
     InitWindow(screenWidth, screenHeight, "Orbit Simulator");
     Vec2d::renderScale = PX_PER_M;
     SetTargetFPS(60);
@@ -66,6 +70,8 @@ int main() {
     camera.rotation = 0.0f;
     camera.zoom = 1.0f;
 
+    CamMode camMode = FOLLOW_BODY;   // estado inicial (sigue a la nave)
+
     double accumulator = 0.0;
     OrbitInfo orbitInfo ;
     
@@ -79,7 +85,6 @@ int main() {
     while (!WindowShouldClose()) {
         // Cámara y zoom (exponencial: necesario para ver LEO desde escala solar)
         camera.zoom *= expf(GetMouseWheelMove() * 0.25f);
-        camera.target = playerShip.physics.position.toRaylib();
         if (camera.zoom < 0.05) camera.zoom = 0.05;
 
         if (IsKeyPressed(KEY_PERIOD)) {           // subir
@@ -140,8 +145,9 @@ int main() {
 
         int steps = 0;
         while (accumulator >= FIXED_DT && steps < MAX_PASOS) {
-            playerShip.HandleInput(FIXED_DT);
-
+            if (camMode != FREE) {
+                playerShip.HandleInput(FIXED_DT);
+            }
             // Substepping: PHYS_DT completo (warp) se divide en pasos estables.
             // N = ceil(PHYS_DT * omegaMax / VERLET_SAFETY) => h_sub*omegaMax <= VERLET_SAFETY.
             double omegaMax = 0.0;
@@ -227,7 +233,45 @@ int main() {
             playerShip.physics.position.toRaylib().x - origin.x,
             playerShip.physics.position.toRaylib().y - origin.y
         };
-        camera.target = shipOffset;
+
+        // C: ciclo por cuerpos seguidos (nave → Sol → Tierra → Asteroide → Luna → …)
+        if (IsKeyPressed(KEY_C)) {
+            if (targetIdx == -1) targetIdx = 0;          // de nave a primer cuerpo
+            else {
+                targetIdx++;
+                if (targetIdx >= static_cast<int>(bodies.size())) targetIdx = -1;  // de vuelta a nave
+            }
+        }
+        // V: alternar cámara libre
+        if (IsKeyPressed(KEY_V)) {
+            if (camMode != FREE) {
+                freeTarget = camera.target;   // heredar la vista actual (coords relativas al primario)
+                camMode = FREE;
+            } else {
+                camMode = FOLLOW_BODY;
+            }
+        }
+
+        // Movimiento de cámara en FREE (una vez por frame, coords relativas al primario);
+        // el pan se escala con 1/zoom para que la velocidad en pantalla sea constante.
+        if (camMode == FREE) {
+            float pan = 300.0f * GetFrameTime() / camera.zoom;
+            if (IsKeyDown(KEY_W)) freeTarget.y -= pan;
+            if (IsKeyDown(KEY_S)) freeTarget.y += pan;
+            if (IsKeyDown(KEY_A)) freeTarget.x -= pan;
+            if (IsKeyDown(KEY_D)) freeTarget.x += pan;
+        }
+
+        if (camMode == FOLLOW_BODY) {
+            if (targetIdx == -1) {
+                camera.target = shipOffset;
+            } else {
+                Vector2 bodyPos = bodies[targetIdx].physics.position.toRaylib();
+                camera.target = { bodyPos.x - origin.x, bodyPos.y - origin.y };
+            }
+        } else {  // FREE
+            camera.target = freeTarget;
+        }
         
         BeginMode2D(camera);
 
