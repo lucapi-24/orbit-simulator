@@ -3,6 +3,7 @@
 #include <raymath.h>
 #include <cmath>
 #include <vector>
+#include <string>
 
 struct NoiseGrid {
     int cell, texW, gw, gh;
@@ -138,6 +139,7 @@ int main() {
     const int screenWidth = 1800;
     const int screenHeight = 960;
     const float EYE_HEIGHT = 0.0017f;
+    float atmoPower = 2.0f;
     const int TEX_W = 2048, TEX_H = 1024;
     float rotAngle = 0.0f;
     const float rot_speed = 0.0f;   // rad/s
@@ -150,8 +152,6 @@ int main() {
     InitWindow(screenWidth, screenHeight, "Proto 3D - sandbox camara orbital");
     SetTargetFPS(60);
     rlSetClipPlanes(0.001, 200000.0);   // far lejano: el planeta (R=1000) antes quedaba partido a 4000
-
-    
 
     Mesh sphereMesh = GenMeshSphere(1.0f, 256, 128);
 
@@ -193,6 +193,12 @@ int main() {
 
     Model sphereModel = LoadModelFromMesh(sphereMesh);
 
+    Shader atmoShader = LoadShader("proto/3d/shaders/atmosfera.vs", "proto/3d/shaders/atmosfera.fs");
+    int camPosLoc = GetShaderLocation(atmoShader, "camPos");
+
+    Mesh atmoMesh = GenMeshSphere(1.0f, 64, 32);
+    Model atmoModel = LoadModelFromMesh(atmoMesh);
+    atmoModel.materials[0].shader = atmoShader;
     Image img = GenImageColor(TEX_W, TEX_H, (Color){0, 0, 0, 255});
     
 
@@ -316,6 +322,11 @@ int main() {
         BeginDrawing();
         ClearBackground({0, 0, 20, 255});
 
+
+        float distCam = Vector3Length(Vector3Subtract(camera.position, spherePos));
+        float nearPlane = (distCam < sphereR*1.1f) ? 0.001f : 0.1f;   // cerca del planeta: plano cercano muy pequeño
+        rlSetClipPlanes(nearPlane, 200000.0f);                        // planos GLOBALES de raylib
+
         BeginMode3D(camera);
         //DrawGrid(100, 1000.0f);   // rejilla de 40x40 celdas, spacing 25 km
 
@@ -324,10 +335,20 @@ int main() {
         Vector3 axis; float angle;
         QuaternionToAxisAngle(QuaternionNormalize(q), &axis, &angle);
 
+        int powerLoc = GetShaderLocation(atmoShader, "power");
+        SetShaderValue(atmoShader, powerLoc, &atmoPower, SHADER_UNIFORM_FLOAT);
 
+        SetShaderValue(atmoShader, camPosLoc, &camera.position, SHADER_UNIFORM_VEC3);
         DrawModelEx(sphereModel, spherePos, axis, angle * RAD2DEG,
             (Vector3){sphereR, sphereR, sphereR}, WHITE);   // tint blanco: no sobretiñe la textura
         //DrawSphereWires(spherePos, sphereR, 16, 16, ORANGE);
+        
+        BeginBlendMode(BLEND_ADDITIVE);
+        rlDisableDepthTest();  
+        DrawModelEx(atmoModel, spherePos, axis, angle * RAD2DEG,
+            (Vector3){sphereR * 1.06f, sphereR * 1.06f, sphereR * 1.06f}, WHITE);
+        rlEnableDepthTest();
+        EndBlendMode();    
 
         EndMode3D();
 

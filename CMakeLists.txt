@@ -34,3 +34,11 @@ target_link_libraries(${PROJECT_NAME} PRIVATE raylib)
 if (WIN32)
     target_link_libraries(${PROJECT_NAME} PRIVATE winmm gdi32 opengl32)
 endif()
+
+# Prototipo 3D (sandbox de planeta procedural)
+add_executable(proto3d proto/3d/main3d.cpp)
+
+target_link_libraries(proto3d PRIVATE raylib)
+if (WIN32)
+    target_link_libraries(proto3d PRIVATE winmm gdi32 opengl32)
+endif()
