@@ -141,35 +141,56 @@ float MeshGroundRadiusLocal(const Mesh& mesh, Vector3 dir) {
 }
 
 int main() {
-    const int screenWidth = 1800;
-    const int screenHeight = 960;
-    const float EYE_HEIGHT = 0.0017f;
-    float atmoPower = 2.0f;
-    const int TEX_W = 2048, TEX_H = 1024;
-    float rotAngle = 0.0f;
-    const float rot_speed = 0.0f;   // rad/s
-    float cloudAngle = 0.0f;        // rad, independiente del planeta
-    const float cloud_speed = 0.02f;      // rad/s → las nubes derivan sobre el terreno
-    unsigned int planetSeed = 0;           // semilla para ruido (0 = aleatoria)
-    unsigned int cloudSeed  = 24;           // semilla para nubes (0 = aleatoria)
-    double cloudUmbral = 0.5;             // 0..1, umbral de densidad de nubes
-    double cloudDureza = 0.1;             // 0..1, suavizado del umbral (0 = nubes duras, 1 = nubes difusas)
+    // ══ CONFIGURACIÓN ═══════════════════════════════════════════════════════
+    const int   screenWidth  = 1800;
+    const int   screenHeight = 960;
+    const float EYE_HEIGHT   = 0.0017f;   // 1.7 m (la unidad es 1 km)
+    const int   TEX_W = 2048, TEX_H = 1024;
 
+    // Escala: 1 unidad = 1 km (radio tipo Tierra)
+    const float sphereR   = 6000.0f;
+    Vector3     spherePos = {0, 0, 0};
 
+    // Grosor de cada shell respecto al radio del planeta (de dentro afuera)
+    const float CLOUD_SHELL = 1.03f;
+    const float ATMO_SHELL  = 1.06f;
+    float       atmoPower   = 2.0f;      // foco del halo (menor = más ancho)
+
+    // Rotaciones independientes (rad/s)
+    float       rotAngle   = 0.0f;
+    const float rot_speed  = 0.0f;       // 0 = planeta quieto; súbelo para ver la deriva
+    float       cloudAngle = 0.0f;
+    const float cloud_speed = 0.02f;     // 0.5 para verlo rápido, 0.15 para el efecto creíble
+    float       sunAngle   = 0.0f;
+    const float sun_speed  = 0.05f;      // el terminador recorre el planeta
+
+    // Sol
+    const float SUN_DIST = 20000.0f;     // ficticia: solo importa la DIRECCIÓN
+    const float SUN_TILT = 3000.0f;      // altura sobre el plano del planeta
+    const float ambient  = 0.06f;        // luz residual en la noche
+
+    // Semillas del ruido procedural (0 = aleatoria)
+    unsigned int planetSeed = 0;
+    unsigned int cloudSeed  = 24;
+    double cloudUmbral = 0.5;            // > umbral = nube
+    double cloudDureza = 0.1;            // margen del smoothstep (mayor = borde más suave)
+
+    // ══ RUIDO ═══════════════════════════════════════════════════════════════
+    // Terreno: 4 octavas, de baja a alta frecuencia
     struct NoiseGrid gA = MakeNoiseGrid(256, TEX_W, TEX_H, planetSeed);
-    struct NoiseGrid gB = MakeNoiseGrid(128,  TEX_W, TEX_H, planetSeed);
+    struct NoiseGrid gB = MakeNoiseGrid(128, TEX_W, TEX_H, planetSeed);
     struct NoiseGrid gC = MakeNoiseGrid(64,  TEX_W, TEX_H, planetSeed);
     struct NoiseGrid gD = MakeNoiseGrid(32,  TEX_W, TEX_H, planetSeed);
 
+    // Nubes: fBm de alta frecuencia (detalle, no geografía)
     struct NoiseGrid gE = MakeNoiseGrid(64, TEX_W, TEX_H, cloudSeed);
     struct NoiseGrid gF = MakeNoiseGrid(32, TEX_W, TEX_H, cloudSeed);
-    struct NoiseGrid gG = MakeNoiseGrid(16,  TEX_W, TEX_H, cloudSeed);
-
+    struct NoiseGrid gG = MakeNoiseGrid(16, TEX_W, TEX_H, cloudSeed);
 
     InitWindow(screenWidth, screenHeight, "Proto 3D - sandbox camara orbital");
     SetTargetFPS(60);
-    rlSetClipPlanes(0.001, 200000.0);   // far lejano: el planeta (R=1000) antes quedaba partido a 4000
 
+    // ══ GEOMETRÍA: esfera del planeta con relieve ═══════════════════════════
     Mesh sphereMesh = GenMeshSphere(1.0f, 256, 128);
 
     for (int v = 0; v < sphereMesh.vertexCount; ++v) {
@@ -208,60 +229,65 @@ int main() {
     }
     UpdateMeshBuffer(sphereMesh, 2, sphereMesh.normals, sphereMesh.vertexCount*3*sizeof(float), 0);
 
-    Model sphereModel = LoadModelFromMesh(sphereMesh);
-
-    Image cloudImg = GenImageColor(TEX_W, TEX_H, (Color){0, 0, 0, 0});
-
-    for (int y = 0; y < cloudImg.height; ++y) {
-    for (int x = 0; x < cloudImg.width; ++x) {
-        float a = CloudAt(x, y, gE, gF, gG, cloudUmbral, cloudDureza);   // 0..1
-        ImageDrawPixel(&cloudImg, x, y, (Color){ 255, 255, 255, (unsigned char)(a*255) });
+    // ══ TEXTURAS ════════════════════════════════════════════════════════════
+    // Terreno: HeightAt → paleta de biomas. Ojo: x es LATITUD e y es LONGITUD
+    // (UVs transpuestas de GenMeshSphere), por eso el hielo polar va por x.
+    Image terrainImg = GenImageColor(TEX_W, TEX_H, (Color){0, 0, 0, 255});
+    for (int y = 0; y < terrainImg.height; ++y) {
+        for (int x = 0; x < terrainImg.width; ++x) {
+            double x01 = HeightAt(x, y, gA, gB, gC, gD);   // 0..1
+            double lat = (double)x / terrainImg.width;     // latitud (eje X)
+            Color c = (lat < 0.03 || lat > 0.97)
+                    ? (Color){240, 244, 250, 255}          // casquetes polares
+                    : HeightColor(x01);
+            ImageDrawPixel(&terrainImg, x, y, c);
+        }
     }
+    Texture2D terrainTex = LoadTextureFromImage(terrainImg);
+    SetTextureWrap(terrainTex, TEXTURE_WRAP_REPEAT);      // el terreno da la vuelta
+
+    // Nubes: solo el canal ALPHA importa (cobertura). ExportImage → nubes.png
+    // sirve para iterar el patrón sin abrir el juego.
+    Image cloudImg = GenImageColor(TEX_W, TEX_H, (Color){0, 0, 0, 0});
+    for (int y = 0; y < cloudImg.height; ++y) {
+        for (int x = 0; x < cloudImg.width; ++x) {
+            float a = CloudAt(x, y, gE, gF, gG, cloudUmbral, cloudDureza);
+            ImageDrawPixel(&cloudImg, x, y, (Color){255, 255, 255, (unsigned char)(a*255)});
+        }
     }
     Texture2D cloudTex = LoadTextureFromImage(cloudImg);
     SetTextureWrap(cloudTex, TEXTURE_WRAP_REPEAT);
+    ExportImage(cloudImg, "nubes.png");
 
-    Shader atmoShader = LoadShader("proto/3d/shaders/atmosfera.vs", "proto/3d/shaders/atmosfera.fs");
-    int camPosLoc = GetShaderLocation(atmoShader, "camPos");
+    // ══ SHADERS ═════════════════════════════════════════════════════════════
+    Shader terrenoShader = LoadShader("proto/3d/shaders/terreno.vs", "proto/3d/shaders/terreno.fs");
+    Shader cloudShader  = LoadShader("proto/3d/shaders/nubes.vs",    "proto/3d/shaders/nubes.fs");
+    Shader atmoShader   = LoadShader("proto/3d/shaders/atmosfera.vs", "proto/3d/shaders/atmosfera.fs");
 
-    Mesh atmoMesh = GenMeshSphere(1.0f, 64, 32);
-    Model atmoModel = LoadModelFromMesh(atmoMesh);
-    atmoModel.materials[0].shader = atmoShader;
+    // Uniforms: se resuelven UNA vez (buscar por nombre cada frame es desperdicio)
+    int sunDirLoc     = GetShaderLocation(terrenoShader, "sunDir");
+    int ambientLoc    = GetShaderLocation(terrenoShader, "ambient");
+    int cloudSunLoc   = GetShaderLocation(cloudShader,  "sunDir");
+    int cloudAmbLoc   = GetShaderLocation(cloudShader,  "ambient");
+    int atmoSunLoc    = GetShaderLocation(atmoShader,   "sunDir");
+    int atmoPowerLoc  = GetShaderLocation(atmoShader,   "power");
+    int camPosLoc     = GetShaderLocation(atmoShader,   "camPos");
 
-    Shader cloudShader = LoadShader("proto/3d/shaders/nubes.vs", "proto/3d/shaders/nubes.fs");
-    Mesh cloudMesh = GenMeshSphere(1.0f, 128, 64);
-    Model cloudModel = LoadModelFromMesh(cloudMesh);
+    // ══ MODELOS ═════════════════════════════════════════════════════════════
+    Model sphereModel = LoadModelFromMesh(sphereMesh);
+    sphereModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = terrainTex;
+    sphereModel.materials[0].shader = terrenoShader;
+
+    // Shell de nubes: sin relieve, solo la textura proyectada
+    Model cloudModel = LoadModelFromMesh(GenMeshSphere(1.0f, 128, 64));
     cloudModel.materials[0].shader = cloudShader;
     cloudModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = cloudTex;
 
+    // Shell atmosférico: baja resolución (es un degradado suave)
+    Model atmoModel = LoadModelFromMesh(GenMeshSphere(1.0f, 64, 32));
+    atmoModel.materials[0].shader = atmoShader;
 
-    Image img = GenImageColor(TEX_W, TEX_H, (Color){0, 0, 0, 255});
-    
-
-    // EL MISMO bucle de siempre, solo cambia cómo se calcula x01:
-    for (int y = 0; y < img.height; ++y) {
-        for (int x = 0; x < img.width; ++x) {
-            int gx = x / gA.cell;                             // ¿qué columna de celda?
-            int gy = y / gA.cell;                             // ¿qué fila?
-            double x01 = HeightAt(x, y, gA, gB, gC, gD);   // normalizar a 0..1
-            double v = (double)y / img.height;
-            Color c;
-            double lat = (double)x / img.width;            // latitud traspiesta en X
-            if (lat < 0.03 || lat > 0.97) c = (Color){240, 244, 250, 255};
-            else c = HeightColor(x01);
-            ImageDrawPixel(&img, x, y, c);                 // ← único DrawPixel por píxel
-        }
-    }
-    Texture2D tex = LoadTextureFromImage(img);
-    SetTextureWrap(tex, TEXTURE_WRAP_REPEAT); 
-
-    sphereModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = tex;
-
-    // Escala: 1 unidad = 1 km. Medio Kerbin = 300 km → radio 300 u.
-    float sphereR = 6000.0f;
-    Vector3 spherePos = {0, 0, 0};
-    float orbitR = sphereR * 1.6f;   // radio del anillo orbital (fuera de la superficie)
-
+    // ══ CÁMARA FPS ══════════════════════════════════════════════════════════
     Camera3D camera = {0};
     camera.position = {sphereR * 3.0f, sphereR * 2.5f, sphereR * 2.0f};
     camera.target = {0, 0, 0};
@@ -269,47 +295,48 @@ int main() {
     camera.fovy = 45.0f;
     camera.projection = CAMERA_PERSPECTIVE;
 
-    // Controlador FPS propio: yaw/pitch + velocidad ajustable
+    // yaw/pitch derivados de la vista inicial, editados por el ratón
     Vector3 startDir = Vector3Normalize(Vector3Subtract(camera.target, camera.position));
-    float yaw   = atan2f(startDir.x, startDir.z);   // giro horizontal
-    float pitch = asinf(startDir.y);                // inclinacion vertical (rad)
+    float yaw   = atan2f(startDir.x, startDir.z);
+    float pitch = asinf(startDir.y);
     float moveSpeed = 150.0f;                       // km/s base
 
-    // Anillo orbital en el plano XZ (la version 2D del sim en el plano Tierra-Luna)
+    // Anillo orbital de referencia (aún no se dibuja)
+    float orbitR = sphereR * 1.6f;
     std::vector<Vector3> ring(64);
     for (int i = 0; i < 64; ++i) {
         float a = 2.0f * PI * i / 64.0f;
         ring[i] = {orbitR * std::cos(a), 0.0f, orbitR * std::sin(a)};
     }
 
-    // Bloquea el ratón al centro de la ventana para poder girar sin límite
     DisableCursor();
 
     while (!WindowShouldClose()) {
         float dt = GetFrameTime();
 
-        rotAngle += rot_speed * dt;
+        rotAngle   += rot_speed * dt;
         cloudAngle += cloud_speed * dt;
+        sunAngle   += sun_speed * dt;
 
-        // ── Cámara FPS propia ──
-        // Rotación: ratón bloqueado al centro → delta sin tocar bordes
+        // ── Cámara FPS: rotación ──
+        // Ratón bloqueado al centro → delta sin tocar bordes
         Vector2 md = GetMouseDelta();
         yaw   -= md.x * 0.0025f;
         pitch -= md.y * 0.0025f;
-        if (pitch > 1.55f) pitch = 1.55f;      // ±~89° (no girar de cabeza)
+        if (pitch >  1.55f) pitch =  1.55f;      // ±~89° (no girar de cabeza)
         if (pitch < -1.55f) pitch = -1.55f;
         float cp = cosf(pitch), sp = sinf(pitch);
         Vector3 fwd = {cp * sinf(yaw), sp, cp * cosf(yaw)};   // hacia dónde mira
 
-        // Velocidad: rueda del ratón (escalada al radio del planeta)
+        // ── Cámara FPS: movimiento ──
+        // Rueda: velocidad escalada al radio del planeta
         moveSpeed *= 1.0f + GetMouseWheelMove() * 0.5f;
         if (moveSpeed < 1.0f) moveSpeed = 1.0f;
         if (moveSpeed > sphereR * 20.0f) moveSpeed = sphereR * 20.0f;
         float step = moveSpeed * dt;
 
-        // Movimiento: WASD relativo a la vista + Q/E subir/bajar
-        Vector3 right = Vector3CrossProduct(fwd, {0, 1, 0});
-        right = Vector3Normalize(right);
+        // WASD relativo a la vista + Q/E bajar/subir
+        Vector3 right = Vector3Normalize(Vector3CrossProduct(fwd, {0, 1, 0}));
         if (IsKeyDown(KEY_W)) camera.position = Vector3Add(camera.position, Vector3Scale(fwd, step));
         if (IsKeyDown(KEY_S)) camera.position = Vector3Subtract(camera.position, Vector3Scale(fwd, step));
         if (IsKeyDown(KEY_D)) camera.position = Vector3Add(camera.position, Vector3Scale(right, step));
@@ -320,89 +347,102 @@ int main() {
         camera.target = Vector3Add(camera.position, fwd);
         camera.up = {0, 1, 0};
 
-// Colisión con la superficie: no dejar pasar la cámara dentro del planeta
+        // ── Colisión: no dejar la cámara dentro del planeta ──
         {
-            Vector3 rel = Vector3Subtract(camera.position, spherePos);
-            float ground = GroundRadius(Vector3Normalize(rel), sphereR, TEX_W, TEX_H, gA, gB, gC, gD);
-            Vector3 push = Vector3Scale(Vector3Normalize(rel), ground + EYE_HEIGHT);
-            if (Vector3Length(rel) < Vector3Length(push)) camera.position = Vector3Add(spherePos, push);
+            Vector3 rel  = Vector3Subtract(camera.position, spherePos);
+            Vector3 relN = Vector3Normalize(rel);
+            float ground = GroundRadius(relN, sphereR, TEX_W, TEX_H, gA, gB, gC, gD);
+            if (Vector3Length(rel) < ground + EYE_HEIGHT)
+                camera.position = Vector3Add(spherePos, Vector3Scale(relN, ground + EYE_HEIGHT));
         }
 
-        // F: aterrizar en la superficie y mirar el horizonte
-        // (se escriben yaw/pitch, que persisten entre frames; el bloque FPS los usa)
-        Quaternion qOrient = QuaternionFromAxisAngle({1, 0, 0}, -90.0f * DEG2RAD);
-        Quaternion qSpin   = QuaternionFromAxisAngle({0, 1, 0},  rotAngle);
-        Quaternion qCloudSpin = QuaternionFromAxisAngle({0,1,0}, cloudAngle);
-        Quaternion qCloud = QuaternionMultiply(qCloudSpin, qOrient);   // mismo qOrient
-        Quaternion q = QuaternionMultiply(qSpin, qOrient);   // spin ∘ orient
+        // ── Orientaciones: el -90° X alinea la malla (polo norte en +Z) ──
+        Quaternion qOrient    = QuaternionFromAxisAngle({1, 0, 0}, -90.0f * DEG2RAD);
+        Quaternion qSpin      = QuaternionFromAxisAngle({0, 1, 0},  rotAngle);
+        Quaternion qCloudSpin = QuaternionFromAxisAngle({0, 1, 0},  cloudAngle);
+        Quaternion q          = QuaternionMultiply(qSpin, qOrient);
+        Quaternion qCloud     = QuaternionMultiply(qCloudSpin, qOrient);
 
+        // ── F: aterrizar en la superficie y mirar al horizonte ──
         if (IsKeyPressed(KEY_F)) {
-            Vector3 rel2 = Vector3Subtract(camera.position, spherePos);
-            Vector3 up = Vector3Normalize(rel2);                    // normal a la esfera en ese punto
-            Vector3 fwd = Vector3CrossProduct(up, {0, 0, 1});       // tangente (horizonte)
-            if (Vector3Length(fwd) < 1e-4f) fwd = Vector3CrossProduct(up, {0, 1, 0});
-            fwd = Vector3Normalize(fwd);
+            Vector3 up  = Vector3Normalize(Vector3Subtract(camera.position, spherePos));
+            Vector3 fwdH = Vector3Normalize(Vector3CrossProduct(up, {0, 0, 1}));   // tangente
+            if (Vector3Length(fwdH) < 1e-4f)
+                fwdH = Vector3Normalize(Vector3CrossProduct(up, {0, 1, 0}));
 
-            // Dirección en el marco LOCAL de la malla (rotación inversa del render)
+            // Colisión EXACTA contra la malla real (ray-triangle, O(triángulos)):
+            // la dirección se lleva al marco local (rotación inversa del render).
             Vector3 upLocal = Vector3Normalize(Vector3RotateByQuaternion(up, QuaternionInvert(q)));
-            float rLocal = MeshGroundRadiusLocal(sphereMesh, upLocal);   // radio real (≈1)
-            float ground = rLocal * sphereR;                             // a km
+            float ground = MeshGroundRadiusLocal(sphereMesh, upLocal) * sphereR;
 
             camera.position = Vector3Add(spherePos, Vector3Scale(up, ground + EYE_HEIGHT));
-            // Derivar los ángulos de la dirección horizontal del horizonte (pitch ≈ 0)
-            yaw   = atan2f(fwd.x, fwd.z);
+            yaw   = atan2f(fwdH.x, fwdH.z);
             pitch = 0.0f;
         }
+
         // Altitud sobre el nivel del mar (km): el relieve solo sube (r >= R), así que
-// dist - R da la elevación del terreno (0 en océano, ~60 en cimas) y crece al volar.
+        // dist - R da la elevación del terreno y crece al volar.
         float altitude = Vector3Length(Vector3Subtract(camera.position, spherePos)) - sphereR;
         if (altitude < 0.0f) altitude = 0.0f;
+
+        // ── UNIFORMS: un único bloque para los tres shaders ──
+        // El sol es UN vector compartido: los tres shaders reciben el mismo.
+        Vector3 sunPos = { cosf(sunAngle) * SUN_DIST, SUN_TILT, sinf(sunAngle) * SUN_DIST };
+        Vector3 sunDir = Vector3Normalize(sunPos);
+
+        SetShaderValue(terrenoShader, sunDirLoc,   &sunDir, SHADER_UNIFORM_VEC3);
+        SetShaderValue(terrenoShader, ambientLoc,  &ambient, SHADER_UNIFORM_FLOAT);
+
+        SetShaderValue(cloudShader,  cloudSunLoc,  &sunDir, SHADER_UNIFORM_VEC3);
+        SetShaderValue(cloudShader,  cloudAmbLoc,  &ambient, SHADER_UNIFORM_FLOAT);
+
+        SetShaderValue(atmoShader,   atmoSunLoc,   &sunDir, SHADER_UNIFORM_VEC3);
+        SetShaderValue(atmoShader,   atmoPowerLoc, &atmoPower, SHADER_UNIFORM_FLOAT);
+        SetShaderValue(atmoShader,   camPosLoc,    &camera.position, SHADER_UNIFORM_VEC3);
 
         BeginDrawing();
         ClearBackground({0, 0, 20, 255});
 
-
-        float distCam = Vector3Length(Vector3Subtract(camera.position, spherePos));
-        float nearPlane = (distCam < sphereR*1.1f) ? 0.001f : 0.1f;   // cerca del planeta: plano cercano muy pequeño
-        rlSetClipPlanes(nearPlane, 200000.0f);                        // planos GLOBALES de raylib
+        // Near adaptativo: 0.001 pegado al suelo (precisión al caminar),
+        // 0.1 en órbita (el z-buffer se estira y gana resolución).
+        float distCam   = Vector3Length(Vector3Subtract(camera.position, spherePos));
+        float nearPlane = (distCam < sphereR * 1.1f) ? 0.001f : 0.1f;
+        rlSetClipPlanes(nearPlane, 200000.0f);   // planos GLOBALES de raylib
 
         BeginMode3D(camera);
-        //DrawGrid(100, 1000.0f);   // rejilla de 40x40 celdas, spacing 25 km
 
-        
+        // ── DIBUJO: de dentro afuera, cada shell sin test de profundidad ──
+        // Sin depth test porque las capas están separadas por ~km y el z-buffer
+        // no da esa precisión a distancia de órbita (evita z-fighting).
+        Vector3 axis, cloudAxis; float angle, cloudAngleRad;
+        QuaternionToAxisAngle(QuaternionNormalize(q),      &axis,       &angle);
+        QuaternionToAxisAngle(QuaternionNormalize(qCloud), &cloudAxis,  &cloudAngleRad);
 
-        Vector3 axis; float angle;
-        Vector3 cloudAxis; float cloudAngleRad;
-        QuaternionToAxisAngle(QuaternionNormalize(qCloud), &cloudAxis, &cloudAngleRad);     
-        QuaternionToAxisAngle(QuaternionNormalize(q), &axis, &angle);
-
-        int powerLoc = GetShaderLocation(atmoShader, "power");
-        SetShaderValue(atmoShader, powerLoc, &atmoPower, SHADER_UNIFORM_FLOAT);
-
-        SetShaderValue(atmoShader, camPosLoc, &camera.position, SHADER_UNIFORM_VEC3);
+        // 1) Terreno: opaco, con test de profundidad normal
         DrawModelEx(sphereModel, spherePos, axis, angle * RAD2DEG,
-            (Vector3){sphereR, sphereR, sphereR}, WHITE);   // tint blanco: no sobretiñe la textura
-        //DrawSphereWires(spherePos, sphereR, 16, 16, ORANGE);
-        
+            (Vector3){sphereR, sphereR, sphereR}, WHITE);   // WHITE = no sobretiñe
+
+        // 2) Nubes: BLEND_ALPHA (tapan lo de detrás) + sin depth test
         BeginBlendMode(BLEND_ALPHA);
-        rlDisableDepthTest();       // mismo motivo que la atmósfera: casi-coincidentes a escala km
+        rlDisableDepthTest();
         DrawModelEx(cloudModel, spherePos, cloudAxis, cloudAngleRad * RAD2DEG,
-            (Vector3){ sphereR*1.03f, sphereR*1.03f, sphereR*1.03f }, WHITE);
+            (Vector3){ sphereR*CLOUD_SHELL, sphereR*CLOUD_SHELL, sphereR*CLOUD_SHELL }, WHITE);
         rlEnableDepthTest();
         EndBlendMode();
 
+        // 3) Atmósfera: BLEND_ADDITIVE (suma luz) + sin depth test
         BeginBlendMode(BLEND_ADDITIVE);
-        rlDisableDepthTest();  
+        rlDisableDepthTest();
         DrawModelEx(atmoModel, spherePos, axis, angle * RAD2DEG,
-            (Vector3){sphereR * 1.06f, sphereR * 1.06f, sphereR * 1.06f}, WHITE);
+            (Vector3){ sphereR*ATMO_SHELL, sphereR*ATMO_SHELL, sphereR*ATMO_SHELL }, WHITE);
         rlEnableDepthTest();
-        EndBlendMode();    
+        EndBlendMode();
 
         EndMode3D();
 
         // UI
         DrawText("WASD mover | Raton mirar | Q/E altura | F: superficie | Rueda velocidad", 20, 20, 20, RAYWHITE);
-        DrawText(TextFormat("Radio: %d km (medio Kerbin) | Altitud: %.1f km | Vel: %.0f km/s",
+        DrawText(TextFormat("Radio: %d km | Altitud: %.1f km | Vel: %.0f km/s",
                   (int)sphereR, altitude, moveSpeed), 20, 44, 20, SKYBLUE);
         EndDrawing();
     }
