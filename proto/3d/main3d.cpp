@@ -69,9 +69,7 @@ double NoiseAt(int x, int y, const struct NoiseGrid& g) {
     return arriba + (abajo - arriba) * ty;                     // y mezcla vertical
 }
 
-
-
-struct NoiseGrid MakeNoiseGrid(int cell, int texW, int texH) {
+struct NoiseGrid MakeNoiseGrid(int cell, int texW, int texH, unsigned int seed = 0) {
     struct NoiseGrid ng;
     ng.cell = cell;
     ng.texW = texW;
@@ -80,6 +78,7 @@ struct NoiseGrid MakeNoiseGrid(int cell, int texW, int texH) {
     ng.gw = gw;
     ng.gh = gh;
     ng.vert.resize(gw * gh);
+    srand(seed);
     for (size_t i = 0; i < ng.vert.size(); ++i) ng.vert[i] = (float)(rand() % 1000) / 1000.0f;
     for (int c = 0; c < gw; ++c) ng.vert[(gh - 1) * gw + c] = ng.vert[c];
     return ng;
@@ -102,6 +101,12 @@ float HeightAt(int x, int y, const NoiseGrid& gA, const NoiseGrid& gB,
 
     double x01 = land * (0.35 + det * 0.4);                            // relieve SOLO en tierra
     return (float)Clamp(x01, 0.0, 1.0);                                // mar → ~0, tierra → 0.35..1
+}
+
+float CloudAt(int x, int y, const struct NoiseGrid& gE, const struct NoiseGrid& gF,
+              const struct NoiseGrid& gG, double umbral, double dureza) {
+    double fbm = 0.6*NoiseAt(x,y,gE) + 0.3*NoiseAt(x,y,gF) + 0.1*NoiseAt(x,y,gG);
+    return (float)Clamp(SmoothStep(umbral, umbral + dureza, fbm), 0.0, 1.0);
 }
 
 // Radio del suelo (km) bajo una dirección unitaria del centro del planeta.
@@ -143,11 +148,23 @@ int main() {
     const int TEX_W = 2048, TEX_H = 1024;
     float rotAngle = 0.0f;
     const float rot_speed = 0.0f;   // rad/s
+    float cloudAngle = 0.0f;        // rad, independiente del planeta
+    const float cloud_speed = 0.02f;      // rad/s → las nubes derivan sobre el terreno
+    unsigned int planetSeed = 0;           // semilla para ruido (0 = aleatoria)
+    unsigned int cloudSeed  = 24;           // semilla para nubes (0 = aleatoria)
+    double cloudUmbral = 0.5;             // 0..1, umbral de densidad de nubes
+    double cloudDureza = 0.1;             // 0..1, suavizado del umbral (0 = nubes duras, 1 = nubes difusas)
 
-    struct NoiseGrid gA = MakeNoiseGrid(256, TEX_W, TEX_H);
-    struct NoiseGrid gB = MakeNoiseGrid(128,  TEX_W, TEX_H);
-    struct NoiseGrid gC = MakeNoiseGrid(64,  TEX_W, TEX_H);
-    struct NoiseGrid gD = MakeNoiseGrid(32,  TEX_W, TEX_H);
+
+    struct NoiseGrid gA = MakeNoiseGrid(256, TEX_W, TEX_H, planetSeed);
+    struct NoiseGrid gB = MakeNoiseGrid(128,  TEX_W, TEX_H, planetSeed);
+    struct NoiseGrid gC = MakeNoiseGrid(64,  TEX_W, TEX_H, planetSeed);
+    struct NoiseGrid gD = MakeNoiseGrid(32,  TEX_W, TEX_H, planetSeed);
+
+    struct NoiseGrid gE = MakeNoiseGrid(64, TEX_W, TEX_H, cloudSeed);
+    struct NoiseGrid gF = MakeNoiseGrid(32, TEX_W, TEX_H, cloudSeed);
+    struct NoiseGrid gG = MakeNoiseGrid(16,  TEX_W, TEX_H, cloudSeed);
+
 
     InitWindow(screenWidth, screenHeight, "Proto 3D - sandbox camara orbital");
     SetTargetFPS(60);
@@ -193,12 +210,31 @@ int main() {
 
     Model sphereModel = LoadModelFromMesh(sphereMesh);
 
+    Image cloudImg = GenImageColor(TEX_W, TEX_H, (Color){0, 0, 0, 0});
+
+    for (int y = 0; y < cloudImg.height; ++y) {
+    for (int x = 0; x < cloudImg.width; ++x) {
+        float a = CloudAt(x, y, gE, gF, gG, cloudUmbral, cloudDureza);   // 0..1
+        ImageDrawPixel(&cloudImg, x, y, (Color){ 255, 255, 255, (unsigned char)(a*255) });
+    }
+    }
+    Texture2D cloudTex = LoadTextureFromImage(cloudImg);
+    SetTextureWrap(cloudTex, TEXTURE_WRAP_REPEAT);
+
     Shader atmoShader = LoadShader("proto/3d/shaders/atmosfera.vs", "proto/3d/shaders/atmosfera.fs");
     int camPosLoc = GetShaderLocation(atmoShader, "camPos");
 
     Mesh atmoMesh = GenMeshSphere(1.0f, 64, 32);
     Model atmoModel = LoadModelFromMesh(atmoMesh);
     atmoModel.materials[0].shader = atmoShader;
+
+    Shader cloudShader = LoadShader("proto/3d/shaders/nubes.vs", "proto/3d/shaders/nubes.fs");
+    Mesh cloudMesh = GenMeshSphere(1.0f, 128, 64);
+    Model cloudModel = LoadModelFromMesh(cloudMesh);
+    cloudModel.materials[0].shader = cloudShader;
+    cloudModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = cloudTex;
+
+
     Image img = GenImageColor(TEX_W, TEX_H, (Color){0, 0, 0, 255});
     
 
@@ -253,6 +289,7 @@ int main() {
         float dt = GetFrameTime();
 
         rotAngle += rot_speed * dt;
+        cloudAngle += cloud_speed * dt;
 
         // ── Cámara FPS propia ──
         // Rotación: ratón bloqueado al centro → delta sin tocar bordes
@@ -295,6 +332,8 @@ int main() {
         // (se escriben yaw/pitch, que persisten entre frames; el bloque FPS los usa)
         Quaternion qOrient = QuaternionFromAxisAngle({1, 0, 0}, -90.0f * DEG2RAD);
         Quaternion qSpin   = QuaternionFromAxisAngle({0, 1, 0},  rotAngle);
+        Quaternion qCloudSpin = QuaternionFromAxisAngle({0,1,0}, cloudAngle);
+        Quaternion qCloud = QuaternionMultiply(qCloudSpin, qOrient);   // mismo qOrient
         Quaternion q = QuaternionMultiply(qSpin, qOrient);   // spin ∘ orient
 
         if (IsKeyPressed(KEY_F)) {
@@ -333,6 +372,8 @@ int main() {
         
 
         Vector3 axis; float angle;
+        Vector3 cloudAxis; float cloudAngleRad;
+        QuaternionToAxisAngle(QuaternionNormalize(qCloud), &cloudAxis, &cloudAngleRad);     
         QuaternionToAxisAngle(QuaternionNormalize(q), &axis, &angle);
 
         int powerLoc = GetShaderLocation(atmoShader, "power");
@@ -343,6 +384,13 @@ int main() {
             (Vector3){sphereR, sphereR, sphereR}, WHITE);   // tint blanco: no sobretiñe la textura
         //DrawSphereWires(spherePos, sphereR, 16, 16, ORANGE);
         
+        BeginBlendMode(BLEND_ALPHA);
+        rlDisableDepthTest();       // mismo motivo que la atmósfera: casi-coincidentes a escala km
+        DrawModelEx(cloudModel, spherePos, cloudAxis, cloudAngleRad * RAD2DEG,
+            (Vector3){ sphereR*1.03f, sphereR*1.03f, sphereR*1.03f }, WHITE);
+        rlEnableDepthTest();
+        EndBlendMode();
+
         BeginBlendMode(BLEND_ADDITIVE);
         rlDisableDepthTest();  
         DrawModelEx(atmoModel, spherePos, axis, angle * RAD2DEG,
