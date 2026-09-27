@@ -3,3 +3,6 @@ __pycache__/
 
 .vscode/
 build/
+
+# Salidas del test de ruido 3D (PNGs de calibración, se regeneran)
+proto/3d/out/

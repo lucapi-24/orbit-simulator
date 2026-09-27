@@ -42,3 +42,12 @@ target_link_libraries(proto3d PRIVATE raylib)
 if (WIN32)
     target_link_libraries(proto3d PRIVATE winmm gdi32 opengl32)
 endif()
+
+# Test de validación del ruido 3D (sin ventana: solo escribe PNGs)
+add_executable(noise_test proto/3d/noise_test.cpp)
+target_include_directories(noise_test PRIVATE proto/3d)
+
+target_link_libraries(noise_test PRIVATE raylib)
+if (WIN32)
+    target_link_libraries(noise_test PRIVATE winmm gdi32 opengl32)
+endif()
