@@ -2,9 +2,9 @@
 #include "Vec2d.hpp"
 #include <cmath>
 
-Spaceship::Spaceship(std::string name, Vec2d pos, Vec2d vel, double mass, float radius, Color color)
+Spaceship::Spaceship(std::string name, Vec2d pos, Vec2d vel, double mass, float radius, Color color, float fuel)
     : CelestialBody(name, pos, vel, mass, radius, color),
-      fuel(1e6f),
+      fuel(fuel),
       angle(-PI / 2.0f),
       rotationSpeed(4.0f),
       thrustPower(200.0),  // m/s^2 - ajustado a unidades SI

@@ -40,6 +40,8 @@ int main() {
     const double MOON_DIST = 384.4e6;
     const double EARTH_ORBIT_V = std::sqrt(G * M_SUN / AU);  // ~29.78 km/s
     const double MOON_ORBIT_V = std::sqrt(G * M_EARTH / MOON_DIST);  // ~1.02 km/s
+    const int MAX_FUEL_RECTANGLE_WIDTH = 200; // Ancho máximo de la barra de combustible en píxeles
+    const int MAX_FUEL = 1e6; // Valor máximo de combustible
 
     bodies.emplace_back("Sun", Vec2d{0, 0}, Vec2d{0, 0}, M_SUN, 6.96e8, YELLOW, true);
     bodies.emplace_back("Earth", Vec2d{AU, 0}, Vec2d{0, EARTH_ORBIT_V}, M_EARTH, EARTH_RADIUS, BLUE);
@@ -62,7 +64,7 @@ int main() {
     Spaceship playerShip("Nave", 
         Vec2d{AU + LEO_R, 0}, 
         Vec2d{0, EARTH_ORBIT_V + LEO_V}, 
-        1000.0, 8.0f, RED);
+        1000.0, 8.0f, RED, MAX_FUEL);  // 1 millón de unidades de fuel
 
     Camera2D camera = {0};
     camera.target = playerShip.physics.position.toRaylib();
@@ -323,9 +325,11 @@ int main() {
         if (orbitInfo.T / PHYS_DT < 50) {
             DrawText(TextFormat("Órbitas inestables, baja warp"), 20, 45, 20, RED);
         } 
-        DrawRectangle(15, 65, 200, 25, GRAY);
-        DrawRectangle(15, 65, static_cast<int>(fuel * 2), 25, GREEN);
-        DrawRectangleLines(15, 65, 200, 25, WHITE);
+        DrawRectangle(15, 65, MAX_FUEL_RECTANGLE_WIDTH, 25, GRAY);
+        int fuelWidth = static_cast<int>(fuel * MAX_FUEL_RECTANGLE_WIDTH / MAX_FUEL);
+
+        DrawRectangle(15, 65, fuelWidth, 25, GREEN);
+        DrawRectangleLines(15, 65, MAX_FUEL_RECTANGLE_WIDTH, 25, WHITE);
 
         // Botón Hohmann → Luna
         Color btnColor = canHohmann ? (hohHover ? LIME : GREEN) : DARKGRAY;

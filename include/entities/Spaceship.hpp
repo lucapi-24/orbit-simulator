@@ -10,7 +10,7 @@ private:
     float thrustPower;
     bool isThrusting;
 public:
-    Spaceship(std::string name, Vec2d pos, Vec2d vel, double mass, float radius, Color color);
+    Spaceship(std::string name, Vec2d pos, Vec2d vel, double mass, float radius, Color color, float fuel);
 
     // Métodos específicos de la nave
     void HandleInput(double dt);
