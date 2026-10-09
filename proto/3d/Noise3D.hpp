@@ -117,6 +117,17 @@ static inline float Noise3D(Vector3 p) {
     return nxy0 + w * (nxy1 - nxy0);
 }
 
+
+static inline float Cont3DEx(Vector3 dir, float contBias) { 
+    float cont = Noise3D(Vector3Scale(dir, CONTINENT_FREC)) * 2.0f;
+    // Segundo pase a 2.4x para romper la regularidad del primer octava"
+    cont += Noise3D(Vector3Scale(dir, CONTINENT_FREC * 2.4f)) * 1.0f;
+    cont = cont * 0.66f + contBias;
+    return cont;
+
+ }   
+static inline float Cont3D(Vector3 dir) {return Cont3DEx(dir, CONT_BIAS); }                         // usa CONT_BIAS
+
 // ── Altura en km respecto al nivel del mar. Positiva = tierra, negativa = mar.
 //    IMPORTANTE: la mezcla océano/tierra es CONTINUA (sin early-return). Un
 //    if que salta de rama produce un acantilado de km justo en la costa.
@@ -126,10 +137,8 @@ static inline float Noise3D(Vector3 p) {
 static inline float Altitud3DEx(Vector3 dir, float contBias, float norm) {
     // Continentes: ruido aparte, MUCHO más suave. Un fBm de 17 octavas a
     // escala continental daría más detalle del que la tectónica soporta.
-    float cont = Noise3D(Vector3Scale(dir, CONTINENT_FREC)) * 2.0f;
-    // Segundo pase a 2.4x para romper la regularidad del primer octava
-    cont += Noise3D(Vector3Scale(dir, CONTINENT_FREC * 2.4f)) * 1.0f;
-    cont = cont * 0.66f + contBias;
+    
+    float cont = Cont3DEx(dir, contBias);
 
     // Máscara tierra/agua: 0 = océano abierto, 1 = tierra firme
     float mask = SmoothStep(0.10f, 0.35f, cont);

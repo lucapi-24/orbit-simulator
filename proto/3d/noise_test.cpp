@@ -252,6 +252,36 @@ static void TestCalibracion(void) {
            biases[mejor], norms[mejor], pcts[mejor]);
 }
 
+static void TestCampoContinentes(void){
+  const int W = 512, H = 256;
+    Image img = GenImageColor(W, H, { 0, 0, 0, 255 });
+    const float umbral[11] ={ -0.4f, -0.3f, -0.2f, -0.1f, 0.0f, 0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f};
+    int cuenta[11] = {0};
+    for (int y = 0; y < H; y++) {
+        float lat = ((float)y / H - 0.5f) * PI;          // -π/2 .. π/2
+        float cl = cosf(lat), sl = sinf(lat);
+        for (int x = 0; x < W; x++) {
+            float lon = ((float)x / W - 0.5f) * 2.0f * PI;
+            // dir desde (lon, lat) — la geometría de la esfera, sin UVs
+            Vector3 dir = { cl * cosf(lon), sl, cl * sinf(lon) };
+            float cont = Cont3D(dir);
+
+            for (int k = 0; k < 11; k++) if (cont > umbral[k]) cuenta[k]++;
+            float g = 128.0f + cont * 213.0f;      // -0.6 → 0 (negro), 0 → 128, +0.6 → 255 (blanco)
+            if (g < 0.0f)   g = 0.0f;              // clampea
+            if (g > 255.0f) g = 255.0f;
+            ImageDrawPixel(&img, x, y, { (unsigned char)g, (unsigned char)g, (unsigned char)g, 255 });
+        }
+    }  
+
+    ExportImage(img, "proto/3d/out/cont_gris.png");
+    UnloadImage(img);                                
+
+    for (int k = 0; k < 11; k++)
+    printf("   umbral %+5.2f → tierra %5.1f %%\n", umbral[k], 100.0f * cuenta[k] / (W * H));
+}
+
+
 int main(void) {
     printf("\n=== TEST RUIDO 3D (gradiente + fBm autoafin) ===\n");
     printf("AMP_BASE=%.1f  AMP_MACRO=%.1f x%d octavas  FBM_GAIN=%.2f  octavas=%d\n",
@@ -260,6 +290,7 @@ int main(void) {
            CONT_BIAS, NORMALIZACION, OCEAN_DEPTH);
     TestPerfil();
     TestMapa();
+    TestCampoContinentes();
     TestContinuidad();
     TestCalibracion();
     return 0;
