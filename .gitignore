@@ -6,3 +6,6 @@ build/
 
 # Salidas del test de ruido 3D (PNGs de calibración, se regeneran)
 proto/3d/out/
+
+# PNGs de debug sueltos (raíz), se regeneran
+nubes.png
