@@ -102,11 +102,55 @@ Compilado automáticamente con `build_all.bat`.
 | Rueda del mouse | Cambiar velocidad |
 | `F` | Teletransportarse a la superficie y ver el horizonte (ray-triangle contra mesh real) |
 
-### 2.2 Noise validation test (sin ventana)
+### 2.2 Mejoras visuales en esta versión
 
-Escribe PNGs en `proto/3d/out/` e imprime mediciones en la consola. Compilado con `build_all.bat` (target `noise`).
+Se han realizado dos cambios clave en `proto/3d/main3d.cpp` para mejorar la percepción de relieve y eliminar los aspectos "cuadrados":
 
----
+**1. Desplazamiento de vértices con ruido 3D (en lugar de 2D UV):**
+
+- **Antes:** `HeightAt()` muestreaba cuadrículas 2D sobre coordenadas de textura (UV). Cada celda medía ~1484 km a escala del planeta, creando patrones repetitivos "a cuadrado" visibles desde cualquier distancia.
+
+- **Después:** `Altitud3D(dir)` evalúa `Noise3D()` sobre el vector dirección unitario del vértice. Esto proporciona:
+  - Escala continental adecuada (λ = 3000 km en la primera octava)
+  - Sin costuras de UV ni patrón de rejilla polar
+  - Alturas consistentes tanto en tierra como en mar (mezcla continua océano/relieve)
+
+- **Factor de desplazamiento:** ajustado de `h * 0.01f` a `h * 0.006f` donde `h` ahora está en km (antes era normalizado 0..1). El relieve máximo es comparable visualmente pero con mejor escala física.
+
+**2. Nubes con variación vertical 3D:**
+
+- **Antes:** Mapa de alpha 2D plano sobre esfera → nubes con aspecto "pintado" o plano.
+
+- **Después:** Ruido `Noise3D()` sobre vector 3D `(x/TEX_W, y/TEX_H, sin(latitud))` → nubes con:
+  - Mayor profundidad aparente
+  - Borde más suave hacia los polos (sin la "cinta" de cobertura polar)
+  - Estructura interna más compleja sin repetir patrón cuadrado
+
+### 2.3 Arquitectura del relieve
+
+```
+Ruido 3D sobre dir unitario
+      │
+      ├──→ Desplazamiento radial de vértices (main3d.cpp:206)
+      │       Factor: 0.006 → relieve ~540 km máximo
+      │
+      └──→ Altitud3D(): fBm 17 octavas
+              • Octava 0: λ=3000 km (montañas continentales)
+              • Octavas 1-4: λ=1500-375 km (features medianos)
+              • Octavas 5-12: λ=93-7.3 km (relieve detallado)
+              • Octavas 13-16: λ=3.6-0.45 km (relieve fino)
+              • Octava 17: λ≈45 m (pedruscos)
+              • NORMALIZACION=0.4220 → pico de 9 km
+```
+
+### 2.4 Estado actual y conocidas
+
+**Mejoras comprobadas con el nuevo ruido 3D:**
+- Los patrones "cuadrados" han desaparecido al eliminar la rejilla 2D UV
+- Los contrastes de altura son perceptibles al volar sobre el planeta
+- Las nubes tienen profundidad y no parecen una capa plana pintada
+
+Siguiente paso: anclar el nivel del mar al campo de continentes en lugar de al signo de `h` (issue documentado en `TERRENO_3D.md`).
 
 ## Estructura del proyecto
 

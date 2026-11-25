@@ -47,6 +47,32 @@ src/
   entities/Spaceship.cpp
 ```
 
+## Prototipo 3D (`proto3d`)
+
+Planeta 3D con icosfera, relieve por ruido y shaders. Target: `proto3d`.
+
+```
+proto/3d/
+  main3d.cpp                  # configuración, ventana, shaders, modelos, cámara, bucle, limpieza
+  IcoSphere.hpp/.cpp          # BuildIcosphere(depth): bloques contiguos de 4^depth triángulos por cara base
+  PlanetNoise.hpp/.cpp        # grids de ruido, alturas (GroundRadius), GenerateCloudImage
+  PlanetMesh.hpp/.cpp         # BuildPlanetMesh (desplazamiento radial), SplitByBaseFace, MeshGroundRadiusLocal
+  CameraRig.hpp               # cámara header-only (CameraEnv)
+  Noise3D.hpp                 # ruido header-only (funciones static inline)
+  shaders/terreno.vs/.fs      # color por píxel desde altitud (texcoords.x)
+```
+
+- **Límite de 65 535 vértices por malla**: raylib usa `unsigned short` en `Mesh.indices`.
+  Depth 7 tiene 163 842 vértices, así que el planeta se sube como 20 mallas (una por cara base).
+  Los índices de cada malla son locales (`SplitByBaseFace`), nunca copiar `icoIndices` directamente.
+- Las mallas de `sphereMesh` usan `MemAlloc`/`MemFree`; las mallas subidas se liberan con `UnloadModel`.
+
+Compilar y ejecutar:
+```powershell
+cmake --build build --target proto3d
+.\build\proto3d.exe
+```
+
 ## Física (estado actual, post-refactor 2026-08)
 
 - **Gravedad unificada**: `GravityEngine::ComputeAcceleration(pos, bodies)` es la ÚNICA
