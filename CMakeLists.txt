@@ -9,8 +9,8 @@ include_directories(include)
 
 # CONFIGURACIÓN DE RAYLIB
 # ==========================================
-# Puedes pasar la ruta al cmake: cmake -DRAYLIB_PATH=ruta/raylib ..
-set(RAYLIB_PATH "C:/raylib/raylib")
+# Puede sobrescribirse al configurar con -DRAYLIB_PATH=ruta/raylib.
+set(RAYLIB_PATH "C:/raylib/raylib" CACHE PATH "Path to local raylib installation")
 
 # Creamos un objetivo (target) importado para Raylib
 add_library(raylib STATIC IMPORTED)

@@ -9,32 +9,30 @@ Ambas comparten raylib. El juego C++ y el sandbox 3D son ejecutables separados.
 
 ---
 
-## Compilación unificada
+## Compilación
 
-Hay dos scripts que manejan la compilación:
-
-| Script | Qué hace |
-|---|---|
-| `build.bat` | Compila y ejecuta `orbus.exe` (simulador 2D). Reutiliza build existente si no hay cambios. |
-| `build_all.bat` | Compila **ambos**: `orbus.exe` y `proto3d.exe`. Ejecuta `orbus.exe` al final. |
-
-**Uso:**
+Se usa CMake con el generador MinGW Makefiles. Configura el proyecto una vez:
 
 ```powershell
-.\build.bat          # Compila orbus.exe y lo ejecuta
-.\build_all.bat      # Compila orbus.exe + proto3d.exe y ejecuta orbuns
+cmake -S . -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release
 ```
 
-**Notas:**
+Para compilar todos los ejecutables o solo uno:
 
-- El primer uso ejecuta cmake y compila todo. Usos posteriores solo hacen `make` (más rápido).
-- Si cambias la configuración (ej. `RAYLIB_PATH`), borra la carpeta `build/` y vuelve a ejecutar el script.
-- La ruta de Raylib es configurable: `cmake -DRAYLIB_PATH=ruta/raylib ..`
-
-**Para rebuild completo:**
 ```powershell
-rm -rf build && .\build_all.bat
+cmake --build build
+cmake --build build --target orbus
+cmake --build build --target proto3d
+cmake --build build --target noise_test
 ```
+
+Para usar Raylib desde otra ubicación, indícala al configurar:
+
+```powershell
+cmake -S . -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DRAYLIB_PATH="C:/ruta/a/raylib"
+```
+
+Después de compilar, ejecuta el programa desde PowerShell, por ejemplo `.\build\orbus.exe` o `.\build\proto3d.exe`.
 
 ---
 
@@ -52,7 +50,7 @@ rm -rf build && .\build_all.bat
 
 ### 1.1 C++ game (orbus.exe)
 
-Compilado automáticamente con `build.bat`.
+Compila con `cmake --build build --target orbus`.
 
 **Controles:**
 
@@ -91,7 +89,7 @@ Sistema Tierra-Luna, RK4, telemetría orbital. Aquí se validan las ideas físic
 
 ### 2.1 Build and run
 
-Compilado automáticamente con `build_all.bat`.
+Compila con `cmake --build build --target proto3d`.
 
 **Controles:**
 
