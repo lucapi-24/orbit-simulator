@@ -33,7 +33,7 @@ static const int   AMP_MACRO_OCT = 3;         // (primeras 3 octavas)
 // si cambias FBM_OCTAVES, AMP_BASE o FREC_BASE, hay que re-barrer.
 static const float NORMALIZACION = 0.4220f;   // escala el relieve → pico de 9 km
 static const float OCEAN_DEPTH   = 1.0f;      // fondo medio bajo el nivel del mar
-static const float CONT_BIAS     = 0.25f;     // → 28.2% de tierra (Tierra real 29%)
+static const float CONT_BIAS     = 0.35f;     // prueba: más tierra que 0.25 (que daba ~28 %)
 
 static const int   CONTINENT_OCT = 4;         // continentes: baja frecuencia
 static const float CONTINENT_FREC = 1.3f;
@@ -134,7 +134,8 @@ static inline float Cont3D(Vector3 dir) {return Cont3DEx(dir, CONT_BIAS); }     
 //
 //    contBias y norm se exponen para que el test pueda barrerlos y calibrar
 //    sin recompilar; el juego llama siempre a Altitud3D.
-static inline float Altitud3DEx(Vector3 dir, float contBias, float norm) {
+static inline float Altitud3DEx(Vector3 dir, float contBias, float norm,
+                                int octaves = FBM_OCTAVES) {
     // Continentes: ruido aparte, MUCHO más suave. Un fBm de 17 octavas a
     // escala continental daría más detalle del que la tectónica soporta.
     
@@ -148,9 +149,10 @@ static inline float Altitud3DEx(Vector3 dir, float contBias, float norm) {
                 - Noise3D(Vector3Scale(dir, 9.0f)) * 0.9f;
 
 
-    // Relieve: 17 octavas con decaimiento 0.5 (auto-afín)
+    // Relieve: fBm con decaimiento 0.5 (auto-afín). `octaves` limita el detalle
+    // a lo que la malla puede muestrear.
     float h = 0.0f, amp = AMP_BASE, f = FREC_BASE;
-    for (int o = 0; o < FBM_OCTAVES; o++) {
+    for (int o = 0; o < octaves; o++) {
         // Las 3 primeras octavas (λ 3000, 1500, 750 km) llevan boost: son las
         // que se ven desde órbita y necesitan más presencia.
         float a = (o < AMP_MACRO_OCT) ? amp * AMP_MACRO : amp;
