@@ -2,9 +2,8 @@
 
 // Input vertex attributes
 in vec3 vertexPosition;
-in vec2 vertexTexCoord;
+in vec2 vertexTexCoord;   // x = altura en km (ver bucle de desplazamiento)
 in vec3 vertexNormal;
-in vec4 vertexColor;
 
 // Input uniform values
 // raylib inyecta estas matrices automáticamente si el shader las declara
@@ -13,14 +12,14 @@ uniform mat4 mvp;
 uniform mat4 matNormal;   // inversa-transpuesta de matModel, para normales
 
 // Output vertex attributes (to fragment shader)
-out vec2 fragTexCoord;
-out vec4 fragColor;
+out float fragH;
+out vec3 fragDir;
 out vec3 fragWorldNormal;   // normal en el mundo, para el lambertiano
 
 void main()
 {
-    fragTexCoord = vertexTexCoord;
-    fragColor = vertexColor;
+    fragH = vertexTexCoord.x;
+    fragDir = vertexPosition;
 
     // matNormal y no matModel: una normal es una DIRECCIÓN, se transforma con
     // la inversa-transpuesta y con w = 0 (si no, la desplazaría en el espacio).

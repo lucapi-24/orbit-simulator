@@ -7,9 +7,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 include_directories(include)
 
-# CONFIGURACIÓN MANUAL DE TU RAYLIB LOCAL
+# CONFIGURACIÓN DE RAYLIB
 # ==========================================
-# Definimos la ruta a tu carpeta de Raylib en el disco C:
+# Puedes pasar la ruta al cmake: cmake -DRAYLIB_PATH=ruta/raylib ..
 set(RAYLIB_PATH "C:/raylib/raylib")
 
 # Creamos un objetivo (target) importado para Raylib
@@ -36,7 +36,11 @@ if (WIN32)
 endif()
 
 # Prototipo 3D (sandbox de planeta procedural)
-add_executable(proto3d proto/3d/main3d.cpp)
+add_executable(proto3d
+    proto/3d/main3d.cpp
+    proto/3d/IcoSphere.cpp
+    proto/3d/PlanetNoise.cpp
+    proto/3d/PlanetMesh.cpp)
 
 target_link_libraries(proto3d PRIVATE raylib)
 if (WIN32)
