@@ -97,8 +97,16 @@ Compila con `cmake --build build --target proto3d`.
 |---|---|
 | `W` `A` `S` `D` | Mover (adelante / izquierda / atrás / derecha) |
 | `Q` / `E` | Abajo / arriba |
-| Rueda del mouse | Cambiar velocidad |
-| `F` | Teletransportarse a la superficie y ver el horizonte (ray-triangle contra mesh real) |
+| Rueda del mouse | Cambiar velocidad de vuelo o de desplazamiento en superficie |
+| `F` | Alternar entre vuelo y superficie del cuerpo seleccionado |
+| `M` | Cambiar entre Tierra y Luna como cuerpo de referencia (en vuelo) |
+| `P` / `L` | Ir a la cima terrestre / al borde de un cráter lunar |
+| `T` | Activar o desactivar el parche lunar móvil bajo la cámara (experimental) |
+| `Espacio` | Saltar en superficie |
+
+Con el parche activo, se selecciona el triángulo de la posición candidata antes de
+calcular la colisión. Los cálculos de distancia usan `double`, aunque la malla y
+la cámara de raylib siguen usando `float`, por lo que queda un error residual.
 
 ### 2.2 Mejoras visuales en esta versión
 

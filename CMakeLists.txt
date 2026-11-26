@@ -40,7 +40,9 @@ add_executable(proto3d
     proto/3d/main3d.cpp
     proto/3d/IcoSphere.cpp
     proto/3d/PlanetNoise.cpp
-    proto/3d/PlanetMesh.cpp)
+    proto/3d/PlanetMesh.cpp
+    proto/3d/PlanetVisual.cpp
+    )
 
 target_link_libraries(proto3d PRIVATE raylib)
 if (WIN32)
